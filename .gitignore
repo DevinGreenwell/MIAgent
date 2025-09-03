@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# API Keys and Secrets
+API.txt
+*.key
+*.pem
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Qdrant Data
+qdrant_storage/
+
+# Large Data Files
+*.csv
+*.json
+title-46.json
+46_cfr_chunks.csv
+references_chunks.csv
+
+# Test Files
+test_*.py
+
+# Temporary Files
+*.tmp
+*.temp
+*.log
