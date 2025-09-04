@@ -6,17 +6,49 @@ from qdrant_client import QdrantClient
 from datetime import datetime
 import time
 
-# Initialize OpenAI with API key from environment
+# Initialize OpenAI with API key from Streamlit secrets or environment
 if "OPENAI_API_KEY" not in os.environ:
-    with open("API.txt", "r") as f:
-        os.environ["OPENAI_API_KEY"] = f.read().strip()
+    try:
+        # Try Streamlit secrets first (for cloud deployment)
+        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+    except:
+        try:
+            # Fallback to local API.txt file (for local development)
+            with open("API.txt", "r") as f:
+                os.environ["OPENAI_API_KEY"] = f.read().strip()
+        except FileNotFoundError:
+            st.error("⚠️ OpenAI API key not found. Please add OPENAI_API_KEY to Streamlit secrets or create API.txt file.")
+            st.stop()
 
 openai.api_key = os.environ["OPENAI_API_KEY"]
 
 # Initialize Qdrant client
 @st.cache_resource
 def init_qdrant():
-    return QdrantClient(host="localhost", port=6333)
+    try:
+        # Try cloud configuration from Streamlit secrets
+        if "qdrant" in st.secrets:
+            return QdrantClient(
+                host=st.secrets["qdrant"]["host"],
+                port=st.secrets["qdrant"].get("port", 6333),
+                api_key=st.secrets["qdrant"].get("api_key", None)
+            )
+        elif "QDRANT_HOST" in st.secrets:
+            return QdrantClient(
+                host=st.secrets["QDRANT_HOST"],
+                api_key=st.secrets.get("QDRANT_API_KEY", None)
+            )
+    except:
+        pass
+    
+    # Fallback to localhost (for local development)
+    try:
+        return QdrantClient(host="localhost", port=6333)
+    except Exception as e:
+        st.error(f"⚠️ Cannot connect to Qdrant database. Please check your configuration. Error: {e}")
+        st.info("💡 For local development: Start Qdrant with `docker run -p 6333:6333 qdrant/qdrant`")
+        st.info("💡 For cloud deployment: Add Qdrant Cloud credentials to Streamlit secrets")
+        st.stop()
 
 qdrant = init_qdrant()
 cfr_collection = "46_cfr_chunks"
