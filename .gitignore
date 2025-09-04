@@ -33,6 +33,7 @@ API.txt
 .env
 .env.local
 .streamlit/secrets.toml
+# Keep config.toml template but not actual secrets
 
 # IDE
 .vscode/
