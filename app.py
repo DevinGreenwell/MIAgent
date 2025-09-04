@@ -27,27 +27,47 @@ openai.api_key = os.environ["OPENAI_API_KEY"]
 def init_qdrant():
     try:
         # Try cloud configuration from Streamlit secrets
-        if "qdrant" in st.secrets:
+        if "QDRANT_HOST" in st.secrets:
+            qdrant_host = st.secrets["QDRANT_HOST"]
+            qdrant_api_key = st.secrets.get("QDRANT_API_KEY", None)
+            
+            # Parse URL to handle different formats
+            if qdrant_host.startswith("https://"):
+                # For cloud URLs like https://cluster.region.cloud.qdrant.io
+                return QdrantClient(
+                    url=qdrant_host,
+                    api_key=qdrant_api_key,
+                    timeout=30.0
+                )
+            else:
+                # For host:port format
+                return QdrantClient(
+                    host=qdrant_host,
+                    port=6333,
+                    api_key=qdrant_api_key,
+                    timeout=30.0
+                )
+                
+        elif "qdrant" in st.secrets:
             return QdrantClient(
                 host=st.secrets["qdrant"]["host"],
                 port=st.secrets["qdrant"].get("port", 6333),
-                api_key=st.secrets["qdrant"].get("api_key", None)
+                api_key=st.secrets["qdrant"].get("api_key", None),
+                timeout=30.0
             )
-        elif "QDRANT_HOST" in st.secrets:
-            return QdrantClient(
-                host=st.secrets["QDRANT_HOST"],
-                api_key=st.secrets.get("QDRANT_API_KEY", None)
-            )
-    except:
-        pass
+    except Exception as cloud_error:
+        st.warning(f"⚠️ Cloud Qdrant connection failed: {cloud_error}")
     
     # Fallback to localhost (for local development)
     try:
-        return QdrantClient(host="localhost", port=6333)
-    except Exception as e:
-        st.error(f"⚠️ Cannot connect to Qdrant database. Please check your configuration. Error: {e}")
+        return QdrantClient(host="localhost", port=6333, timeout=10.0)
+    except Exception as local_error:
+        st.error(f"⚠️ Cannot connect to any Qdrant database.")
+        st.error(f"Cloud error: {cloud_error if 'cloud_error' in locals() else 'No cloud config'}")
+        st.error(f"Local error: {local_error}")
         st.info("💡 For local development: Start Qdrant with `docker run -p 6333:6333 qdrant/qdrant`")
         st.info("💡 For cloud deployment: Add Qdrant Cloud credentials to Streamlit secrets")
+        st.info("📋 Required secrets: QDRANT_HOST and QDRANT_API_KEY")
         st.stop()
 
 qdrant = init_qdrant()
