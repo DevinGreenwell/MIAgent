@@ -592,7 +592,7 @@ with st.sidebar:
                 
                 with col2:
                     # Delete button
-                    if st.button("Delete", key=f"delete_{chat_id}", help="Delete chat"):
+                    if st.button("🗑️", key=f"delete_{chat_id}", help="Delete chat"):
                         del st.session_state.chat_history[chat_id]
                         if chat_id == st.session_state.current_chat_id:
                             start_new_chat()
