@@ -252,17 +252,26 @@ def generate_conversational_response(user_input, search_results, conversation_hi
         messages = [
             {
                 "role": "system",
-                "content": """You are an expert maritime regulatory consultant engaging in natural conversation about maritime regulations.
+                "content": f"""You are an experienced Officer-in-Charge of Marine Inspection (OCMI) providing regulatory guidance to a Marine Inspector in the field. Your role is to support inspection activities with authoritative regulatory interpretation and practical guidance.
 
-CONVERSATION STYLE:
-- Speak naturally and conversationally, as if chatting with a colleague
-- Provide comprehensive answers with detailed explanations
-- Reference previous parts of our conversation when relevant
-- Ask follow-up questions to keep the conversation flowing
-- Offer additional insights or related topics
+PROFESSIONAL TONE:
+- Speak as a knowledgeable OCMI to a Marine Inspector
+- Be professional but approachable, like a senior colleague providing guidance
+- Offer practical inspection guidance alongside regulatory requirements
+- Share insights from years of maritime inspection experience
+- Provide clear, actionable guidance that inspectors can apply immediately
+
+{f"VESSEL FOCUS: The inspector is currently working with {st.session_state.vessel_context['type']} ({st.session_state.vessel_context['category']}). Tailor your regulatory guidance specifically to this vessel type and applicable subchapter requirements." if st.session_state.vessel_context['type'] else ""}
+
+REGULATORY EXPERTISE:
+- Reference specific CFR sections, subchapters, and applicable standards
+- Explain the 'why' behind regulations to help inspectors understand intent
+- Highlight common deficiencies and inspection focus areas
+- Provide guidance on acceptable evidence of compliance
+- Suggest inspection techniques and best practices
 
 CITATION APPROACH:
-- Weave specific regulatory citations naturally into your explanations
+- Lead with practical guidance, then cite specific regulatory authority
 - End your response with a "Sources:" section listing the exact citations used
 - Use precise section numbers (e.g., "46 CFR §117.78", "SOLAS Chapter III-2", "ABS Part 4 Section 3")
 - Make citations actionable - users should know exactly where to look
@@ -394,8 +403,73 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("MIAgent")
-st.caption("Have a conversation about maritime regulations - ask questions, get clarifications, and explore related topics")
+# Vessel Type Selection
+st.subheader("🚢 Vessel & System Focus")
+st.caption("Select vessel type or system to receive targeted regulatory guidance")
+
+# Create vessel type selector
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    vessel_category = st.selectbox(
+        "Category",
+        ["Select Category", "Domestic", "International", "System"]
+    )
+
+with col2:
+    if vessel_category == "Domestic":
+        vessel_type = st.selectbox(
+            "Vessel Type",
+            ["Select Vessel Type", 
+             "Tank Vessel (Subchapter D)",
+             "Small Passenger Vessel (Subchapter T)", 
+             "Small Passenger Vessel (Subchapter K)",
+             "Passenger Vessel (Subchapter H)",
+             "Towing Vessel (Subchapter M)",
+             "Cargo Vessel (Subchapter I)",
+             "Offshore Supply Vessel (Subchapter L)", 
+             "Dangerous Cargo Vessel (Subchapter O)"]
+        )
+    elif vessel_category == "International":
+        vessel_type = st.selectbox(
+            "Vessel Type",
+            ["Select Vessel Type",
+             "Foreign Passenger Vessel",
+             "Foreign Freight Vessel", 
+             "Foreign Tank Vessel",
+             "Foreign Chemical Vessel"]
+        )
+    elif vessel_category == "System":
+        vessel_type = st.selectbox(
+            "System Type",
+            ["Select System Type",
+             "Mechanical",
+             "Electrical",
+             "Navigation", 
+             "Propulsion",
+             "Engineering",
+             "Lifesaving",
+             "Fire Protection",
+             "Stability",
+             "Manning"]
+        )
+    else:
+        vessel_type = "Select Vessel Type"
+
+with col3:
+    if vessel_category != "Select Category" and vessel_type != "Select Vessel Type" and vessel_type != "Select System Type":
+        st.success(f"✅ {vessel_type}")
+        
+# Store selections in session state
+if "vessel_context" not in st.session_state:
+    st.session_state.vessel_context = {"category": "", "type": ""}
+    
+if vessel_category != "Select Category" and vessel_type not in ["Select Vessel Type", "Select System Type"]:
+    st.session_state.vessel_context = {"category": vessel_category, "type": vessel_type}
+else:
+    st.session_state.vessel_context = {"category": "", "type": ""}
+
+st.divider()
 
 # Initialize session state for chat history
 if "messages" not in st.session_state:
@@ -411,12 +485,57 @@ if "current_chat_id" not in st.session_state:
 if "chat_counter" not in st.session_state:
     st.session_state.chat_counter = 1
 
+# Generate intelligent chat title based on conversation context
+def generate_chat_title(messages):
+    """Generate a concise, contextual title for the chat based on the conversation content."""
+    try:
+        # Get the first user message and assistant response if available
+        user_messages = [msg["content"] for msg in messages if msg["role"] == "user"]
+        if not user_messages:
+            return "New Chat"
+        
+        # For longer conversations, use the first few exchanges for context
+        context_messages = messages[:4] if len(messages) > 4 else messages
+        
+        # Create a prompt for title generation
+        conversation_text = ""
+        for msg in context_messages:
+            role = "User" if msg["role"] == "user" else "Assistant"
+            content = msg["content"][:200] + "..." if len(msg["content"]) > 200 else msg["content"]
+            conversation_text += f"{role}: {content}\n"
+        
+        # Generate title using OpenAI
+        response = openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "You are a title generator for maritime regulatory conversations. Create a short, descriptive title (3-7 words) that captures the main topic or question being discussed. Focus on maritime regulations, vessel requirements, safety standards, or inspection topics. Examples: 'Life Ring Requirements', 'Propeller Inspection Standards', 'Towing Vessel Regulations', 'Safety Equipment Guidelines'."
+                },
+                {
+                    "role": "user", 
+                    "content": f"Generate a short title for this maritime regulatory conversation:\n\n{conversation_text}"
+                }
+            ],
+            max_tokens=20,
+            temperature=0.3
+        )
+        
+        title = response.choices[0].message.content.strip()
+        # Remove quotes if present and ensure reasonable length
+        title = title.strip('"').strip("'")
+        return title[:60] if len(title) > 60 else title
+        
+    except Exception as e:
+        # Fallback to truncated first message if AI fails
+        first_message = user_messages[0] if user_messages else "New Chat"
+        return first_message[:50] + "..." if len(first_message) > 50 else first_message
+
 # Save current chat before switching
 def save_current_chat():
     if st.session_state.messages:
-        # Create a title from the first user message
-        first_message = next((msg["content"] for msg in st.session_state.messages if msg["role"] == "user"), "New Chat")
-        title = first_message[:50] + "..." if len(first_message) > 50 else first_message
+        # Generate intelligent title based on conversation context
+        title = generate_chat_title(st.session_state.messages)
         
         st.session_state.chat_history[st.session_state.current_chat_id] = {
             "title": title,
@@ -440,6 +559,11 @@ def start_new_chat():
 
 # Sidebar with chat management
 with st.sidebar:
+    st.title("🛡️ MIAgent")
+    st.caption("**Officer-in-Charge, Marine Inspection**")
+    st.caption("Maritime Regulatory Assistant for Marine Inspectors")
+    st.divider()
+    
     st.header("💬 Chats")
     
     # New Chat button
@@ -491,11 +615,12 @@ with st.sidebar:
 # Add conversation tips
 if len(st.session_state.messages) == 0:
     with st.container():
-        st.info("💡 **Tips for better conversations:**\n"
-                "- Ask follow-up questions like 'What about commercial vessels?' or 'Can you explain that further?'\n"
-                "- Reference previous topics: 'How does this relate to what we discussed about life jackets?'\n"
-                "- Request clarification: 'I don't understand the difference between...'\n"
-                "- Ask for examples: 'Can you give me a specific scenario?'")
+        st.info("🛡️ **OCMI Guidance Available:**\n"
+                "- **Regulatory Questions**: 'What are the manning requirements for this vessel type?'\n"
+                "- **Inspection Guidance**: 'What should I focus on during the safety equipment inspection?'\n"
+                "- **Compliance Issues**: 'The vessel has X deficiency - what are the regulatory options?'\n"
+                "- **Practical Application**: 'How do I verify compliance with this specific requirement?'\n"
+                "- **Follow-up**: Ask for clarification, examples, or related inspection points")
 
 # Chat interface
 for i, message in enumerate(st.session_state.messages):
@@ -510,7 +635,7 @@ for i, message in enumerate(st.session_state.messages):
             st.write(message["content"])
 
 # Chat input
-if prompt := st.chat_input("Continue our conversation about maritime regulations..."):
+if prompt := st.chat_input("Ask your OCMI about regulatory requirements, inspection guidance, or compliance issues..."):
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     
