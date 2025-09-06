@@ -17,7 +17,7 @@ if "OPENAI_API_KEY" not in os.environ:
             with open("API.txt", "r") as f:
                 os.environ["OPENAI_API_KEY"] = f.read().strip()
         except FileNotFoundError:
-            st.error("⚠️ OpenAI API key not found. Please add OPENAI_API_KEY to Streamlit secrets or create API.txt file.")
+            st.error("OpenAI API key not found. Please add OPENAI_API_KEY to Streamlit secrets or create API.txt file.")
             st.stop()
 
 openai.api_key = os.environ["OPENAI_API_KEY"]
@@ -56,18 +56,18 @@ def init_qdrant():
                 timeout=30.0
             )
     except Exception as cloud_error:
-        st.warning(f"⚠️ Cloud Qdrant connection failed: {cloud_error}")
+        st.warning(f"Cloud Qdrant connection failed: {cloud_error}")
     
     # Fallback to localhost (for local development)
     try:
         return QdrantClient(host="localhost", port=6333, timeout=10.0)
     except Exception as local_error:
-        st.error(f"⚠️ Cannot connect to any Qdrant database.")
+        st.error(f"Cannot connect to any Qdrant database.")
         st.error(f"Cloud error: {cloud_error if 'cloud_error' in locals() else 'No cloud config'}")
         st.error(f"Local error: {local_error}")
-        st.info("💡 For local development: Start Qdrant with `docker run -p 6333:6333 qdrant/qdrant`")
-        st.info("💡 For cloud deployment: Add Qdrant Cloud credentials to Streamlit secrets")
-        st.info("📋 Required secrets: QDRANT_HOST and QDRANT_API_KEY")
+        st.info("For local development: Start Qdrant with `docker run -p 6333:6333 qdrant/qdrant`")
+        st.info("For cloud deployment: Add Qdrant Cloud credentials to Streamlit secrets")
+        st.info("Required secrets: QDRANT_HOST and QDRANT_API_KEY")
         st.stop()
 
 qdrant = init_qdrant()
@@ -403,8 +403,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Vessel Type Selection
-st.subheader("🚢 Vessel & System Focus")
 st.caption("Select vessel type or system to receive targeted regulatory guidance")
 
 # Create vessel type selector
@@ -421,44 +419,44 @@ with col2:
         vessel_type = st.selectbox(
             "Vessel Type",
             ["Select Vessel Type", 
-             "Tank Vessel (Subchapter D)",
-             "Small Passenger Vessel (Subchapter T)", 
-             "Small Passenger Vessel (Subchapter K)",
-             "Passenger Vessel (Subchapter H)",
-             "Towing Vessel (Subchapter M)",
              "Cargo Vessel (Subchapter I)",
+             "Dangerous Cargo Vessel (Subchapter O)",
              "Offshore Supply Vessel (Subchapter L)", 
-             "Dangerous Cargo Vessel (Subchapter O)"]
+             "Passenger Vessel (Subchapter H)",
+             "Small Passenger Vessel (Subchapter K)",
+             "Small Passenger Vessel (Subchapter T)", 
+             "Tank Vessel (Subchapter D)",
+             "Towing Vessel (Subchapter M)"]
         )
     elif vessel_category == "International":
         vessel_type = st.selectbox(
             "Vessel Type",
             ["Select Vessel Type",
-             "Foreign Passenger Vessel",
+             "Foreign Chemical Vessel",
              "Foreign Freight Vessel", 
-             "Foreign Tank Vessel",
-             "Foreign Chemical Vessel"]
+             "Foreign Passenger Vessel",
+             "Foreign Tank Vessel"]
         )
     elif vessel_category == "System":
         vessel_type = st.selectbox(
             "System Type",
             ["Select System Type",
-             "Mechanical",
              "Electrical",
+             "Engineering",
+             "Fire Protection",
+             "Lifesaving",
+             "Manning",
+             "Mechanical",
              "Navigation", 
              "Propulsion",
-             "Engineering",
-             "Lifesaving",
-             "Fire Protection",
-             "Stability",
-             "Manning"]
+             "Stability"]
         )
     else:
         vessel_type = "Select Vessel Type"
 
 with col3:
     if vessel_category != "Select Category" and vessel_type != "Select Vessel Type" and vessel_type != "Select System Type":
-        st.success(f"✅ {vessel_type}")
+        st.success(f"{vessel_type}")
         
 # Store selections in session state
 if "vessel_context" not in st.session_state:
@@ -559,15 +557,13 @@ def start_new_chat():
 
 # Sidebar with chat management
 with st.sidebar:
-    st.title("🛡️ MIAgent")
-    st.caption("**Officer-in-Charge, Marine Inspection**")
-    st.caption("Maritime Regulatory Assistant for Marine Inspectors")
+    st.title("MIAgent")
     st.divider()
     
-    st.header("💬 Chats")
+    st.header("Chats")
     
     # New Chat button
-    if st.button("🆕 New Chat", use_container_width=True):
+    if st.button("New Chat", use_container_width=True):
         start_new_chat()
         st.rerun()
     
@@ -592,7 +588,7 @@ with st.sidebar:
                 with col1:
                     # Make the title clickable
                     if st.button(
-                        f"💬 {chat_data['title']}", 
+                        f"{chat_data['title']}", 
                         key=f"load_{chat_id}",
                         help=f"Created: {chat_data['timestamp']}",
                         use_container_width=True
@@ -602,20 +598,20 @@ with st.sidebar:
                 
                 with col2:
                     # Delete button
-                    if st.button("🗑️", key=f"delete_{chat_id}", help="Delete chat"):
+                    if st.button("Delete", key=f"delete_{chat_id}", help="Delete chat"):
                         del st.session_state.chat_history[chat_id]
                         if chat_id == st.session_state.current_chat_id:
                             start_new_chat()
                         st.rerun()
                 
-                st.caption(f"📅 {chat_data['timestamp']}")
+                st.caption(f"{chat_data['timestamp']}")
     else:
         st.info("No previous chats")
 
 # Add conversation tips
 if len(st.session_state.messages) == 0:
     with st.container():
-        st.info("🛡️ **OCMI Guidance Available:**\n"
+        st.info("**OCMI Guidance Available:**\n"
                 "- **Regulatory Questions**: 'What are the manning requirements for this vessel type?'\n"
                 "- **Inspection Guidance**: 'What should I focus on during the safety equipment inspection?'\n"
                 "- **Compliance Issues**: 'The vessel has X deficiency - what are the regulatory options?'\n"
@@ -630,7 +626,7 @@ for i, message in enumerate(st.session_state.messages):
             
             # Show if it was a follow-up
             if message.get("is_follow_up"):
-                st.success("🔄 Follow-up question - used conversation context")
+                st.success("Follow-up question - used conversation context")
         else:
             st.write(message["content"])
 
@@ -673,7 +669,7 @@ if prompt := st.chat_input("Ask your OCMI about regulatory requirements, inspect
 
             # Show if it was a follow-up
             if result.get("is_follow_up"):
-                st.success("🔄 Follow-up question - used conversation context")
+                st.success("Follow-up question - used conversation context")
 
 # Auto-save current chat when messages are added
 if st.session_state.messages:
