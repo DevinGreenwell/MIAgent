@@ -380,28 +380,87 @@ st.set_page_config(
 with st.sidebar:
     st.title("MIAgent")
 
-# Custom CSS to remove header padding and hide default elements
+# Custom CSS for reduced padding and mobile optimization
 st.markdown("""
 <style>
+    /* Reduced padding for header and main container */
     .block-container {
-        padding-top: 1rem;
+        padding-top: 0.5rem;
         padding-bottom: 0rem;
-        padding-left: 5rem;
-        padding-right: 5rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
     }
+    
+    /* Hide unwanted elements */
     .element-container:has(iframe[height="0"]) {
         display: none;
     }
     div[data-testid="metric-container"] {
         display: none;
     }
+    
+    /* Mobile optimization */
+    @media (max-width: 768px) {
+        .block-container {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+            padding-top: 0.25rem;
+        }
+        
+        /* Make sidebar collapsible on mobile */
+        section[data-testid="stSidebar"] {
+            width: 280px;
+        }
+        
+        /* Optimize column layout for mobile */
+        .row-widget.stSelectbox > div {
+            width: 100% !important;
+        }
+        
+        /* Improve chat input on mobile */
+        .stChatInput > div {
+            width: 100% !important;
+        }
+        
+        /* Better spacing for mobile chat */
+        .stChatMessage {
+            margin: 0.5rem 0;
+        }
+        
+        /* Compact buttons on mobile */
+        .stButton > button {
+            width: 100%;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        /* Responsive text sizing */
+        h1 {
+            font-size: 1.5rem !important;
+        }
+        h2 {
+            font-size: 1.25rem !important;
+        }
+        h3 {
+            font-size: 1.1rem !important;
+        }
+    }
+    
+    /* Tablet optimization */
+    @media (max-width: 1024px) and (min-width: 769px) {
+        .block-container {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
 st.caption("Select vessel type or system to receive targeted regulatory guidance")
 
-# Create vessel type selector
-col1, col2, col3 = st.columns(3)
+# Create vessel type selector - responsive layout
+# Use different column layouts for desktop vs mobile
+col1, col2, col3 = st.columns([1, 2, 1])
 
 with col1:
     vessel_category = st.selectbox(
