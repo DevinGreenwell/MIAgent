@@ -385,6 +385,10 @@ st.set_page_config(
     layout="wide"
 )
 
+# Add MIAgent title at the very top of the sidebar
+with st.sidebar:
+    st.title("MIAgent")
+
 # Custom CSS to remove header padding and hide default elements
 st.markdown("""
 <style>
@@ -557,7 +561,6 @@ def start_new_chat():
 
 # Sidebar with chat management
 with st.sidebar:
-    st.title("MIAgent")
     st.divider()
     
     st.header("Chats")
