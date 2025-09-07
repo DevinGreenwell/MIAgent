@@ -667,9 +667,7 @@ if len(st.session_state.messages) == 0:
         st.info("**OCMI Guidance Available:**\n"
                 "- **Regulatory Questions**: 'What are the manning requirements for this vessel type?'\n"
                 "- **Inspection Guidance**: 'What should I focus on during the safety equipment inspection?'\n"
-                "- **Compliance Issues**: 'The vessel has X deficiency - what are the regulatory options?'\n"
-                "- **Practical Application**: 'How do I verify compliance with this specific requirement?'\n"
-                "- **Follow-up**: Ask for clarification, examples, or related inspection points")
+                "- **Compliance Issues**: 'The vessel has X deficiency - what are the regulatory options?'")
 
 # Chat interface
 for i, message in enumerate(st.session_state.messages):
@@ -684,7 +682,7 @@ for i, message in enumerate(st.session_state.messages):
             st.write(message["content"])
 
 # Chat input
-if prompt := st.chat_input("Ask your OCMI about regulatory requirements, inspection guidance, or compliance issues..."):
+if prompt := st.chat_input("Ask MIAgent a question..."):
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     
