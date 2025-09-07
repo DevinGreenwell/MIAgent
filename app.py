@@ -399,6 +399,11 @@ st.markdown("""
         display: none;
     }
     
+    /* Hide mobile title on desktop */
+    .mobile-title {
+        display: none;
+    }
+    
     /* Mobile optimization */
     @media (max-width: 768px) {
         .block-container {
@@ -410,6 +415,16 @@ st.markdown("""
         /* Make sidebar collapsible on mobile */
         section[data-testid="stSidebar"] {
             width: 280px;
+        }
+        
+        /* Show mobile title in main area */
+        .mobile-title {
+            display: block !important;
+        }
+        
+        /* Hide desktop-only elements on mobile */
+        .desktop-only {
+            display: none !important;
         }
         
         /* Optimize column layout for mobile */
@@ -455,6 +470,9 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# Mobile title - only shows on mobile devices
+st.markdown('<h1 class="mobile-title">MIAgent</h1>', unsafe_allow_html=True)
 
 st.caption("Select vessel type or system to receive targeted regulatory guidance")
 
