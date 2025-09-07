@@ -402,6 +402,8 @@ st.markdown("""
     /* Hide mobile title on desktop */
     .mobile-title {
         display: none;
+        margin: 0;
+        padding: 0;
     }
     
     /* Mobile optimization */
@@ -409,7 +411,7 @@ st.markdown("""
         .block-container {
             padding-left: 0.5rem;
             padding-right: 0.5rem;
-            padding-top: 0.25rem;
+            padding-top: 1rem;
         }
         
         /* Make sidebar collapsible on mobile */
@@ -420,6 +422,12 @@ st.markdown("""
         /* Show mobile title in main area */
         .mobile-title {
             display: block !important;
+            margin-top: 0 !important;
+            margin-bottom: 1rem !important;
+            padding-top: 0.5rem !important;
+            font-size: 2rem !important;
+            font-weight: 600 !important;
+            text-align: center;
         }
         
         /* Hide desktop-only elements on mobile */
