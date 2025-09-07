@@ -6,17 +6,31 @@ from qdrant_client import QdrantClient
 from datetime import datetime
 import time
 
-# Initialize OpenAI with API key from environment
-if "OPENAI_API_KEY" not in os.environ:
-    with open("API.txt", "r") as f:
-        os.environ["OPENAI_API_KEY"] = f.read().strip()
+# Secrets/env helpers
+def get_secret(name: str, default=None):
+    if name in st.secrets:
+        return st.secrets[name]
+    return os.getenv(name, default)
 
-openai.api_key = os.environ["OPENAI_API_KEY"]
+def get_openai_key() -> str:
+    key = get_secret("OPENAI_API_KEY")
+    if not key:
+        st.error("Missing OPENAI_API_KEY. Set it in Streamlit secrets or environment.")
+        st.stop()
+    return key
+
+openai.api_key = get_openai_key()
 
 # Initialize Qdrant client
 @st.cache_resource
 def init_qdrant():
-    return QdrantClient(host="localhost", port=6333)
+    url = get_secret("QDRANT_URL")
+    api_key = get_secret("QDRANT_API_KEY")
+    if url:
+        return QdrantClient(url=url, api_key=api_key) if api_key else QdrantClient(url=url)
+    host = get_secret("QDRANT_HOST", "localhost")
+    port = int(get_secret("QDRANT_PORT", "6333"))
+    return QdrantClient(host=host, port=port)
 
 qdrant = init_qdrant()
 cfr_collection = "46_cfr_chunks"
