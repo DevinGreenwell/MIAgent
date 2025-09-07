@@ -411,7 +411,7 @@ st.markdown("""
         .block-container {
             padding-left: 0.5rem;
             padding-right: 0.5rem;
-            padding-top: 1rem;
+            padding-top: 2rem;
         }
         
         /* Make sidebar collapsible on mobile */
@@ -419,15 +419,30 @@ st.markdown("""
             width: 280px;
         }
         
+        /* Ensure header doesn't cut off content on mobile */
+        header[data-testid="stHeader"] {
+            height: 0px !important;
+            min-height: 0px !important;
+        }
+        
+        /* Prevent viewport cutoff */
+        .main .block-container {
+            max-width: none !important;
+        }
+        
         /* Show mobile title in main area */
         .mobile-title {
             display: block !important;
-            margin-top: 0 !important;
+            margin-top: 1rem !important;
             margin-bottom: 1rem !important;
-            padding-top: 0.5rem !important;
+            padding-top: 1rem !important;
+            padding-bottom: 0.5rem !important;
             font-size: 2rem !important;
             font-weight: 600 !important;
             text-align: center;
+            line-height: 1.2 !important;
+            position: relative !important;
+            z-index: 1000 !important;
         }
         
         /* Hide desktop-only elements on mobile */
