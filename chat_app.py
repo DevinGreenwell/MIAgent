@@ -190,7 +190,7 @@ def search_with_context(query, conversation_history, search_limit=10):
             "error": str(e)
         }
 
-def generate_conversational_response(user_input, search_results, conversation_history):
+def generate_conversational_response(user_input, search_results, conversation_history, temperature_override: float | None = None):
     """Generate a conversational response using context and conversation history"""
     try:
         # Build conversation context
@@ -252,7 +252,8 @@ Remember: You're having a professional conversation, not writing a formal report
             response = openai.chat.completions.create(
                 model="gpt-5-mini-2025-08-07",
                 messages=messages,
-                max_completion_tokens=800
+                max_completion_tokens=800,
+                temperature=temperature_override if temperature_override is not None else 0.7,
             )
             
             # Check if response has content
@@ -266,7 +267,7 @@ Remember: You're having a professional conversation, not writing a formal report
                     model="gpt-4o-mini",
                     messages=messages,
                     max_tokens=800,
-                    temperature=0.7
+                    temperature=temperature_override if temperature_override is not None else 0.7,
                 )
                 
                 if not response.choices or not response.choices[0].message.content:
@@ -345,6 +346,27 @@ st.markdown("""
 st.title("MIAgent")
 st.caption("Have a conversation about maritime regulations - ask questions, get clarifications, and explore related topics")
 
+# Additional UI polish CSS
+st.markdown(
+    """
+    <style>
+        /* Chat message subtle backgrounds */
+        [data-testid="stChatMessage"] div:nth-child(1)[class*="content"] {
+            background: transparent !important;
+        }
+        [data-testid="stChatMessage"] .stMarkdown {
+            padding: 0.25rem 0;
+        }
+
+        /* Responsive padding for small screens */
+        @media (max-width: 900px) {
+            .block-container { padding-left: 1rem; padding-right: 1rem; }
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Initialize session state for chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -358,6 +380,36 @@ if "current_chat_id" not in st.session_state:
     
 if "chat_counter" not in st.session_state:
     st.session_state.chat_counter = 1
+
+# Optional queued prompt support (for example chips)
+if "queued_prompt" not in st.session_state:
+    st.session_state.queued_prompt = None
+
+# Helper: format source type badges
+def classify_source(source: str):
+    s = (source or "").lower()
+    if s.startswith("46 cfr") or "cfr" in s:
+        return ("CFR", "#1D4ED8")  # blue-700
+    if s.startswith("abs"):
+        return ("ABS", "#0E7490")  # teal-600
+    if s.startswith("solas"):
+        return ("SOLAS", "#7C3AED")  # violet-600
+    if s.startswith("nvi"):
+        return ("NVIC", "#DB2777")  # pink-600
+    if s.startswith("msm"):
+        return ("MSM", "#059669")  # emerald-600
+    if s.startswith("uscg"):
+        return ("USCG", "#DC2626")  # red-600
+    return ("REF", "#334155")      # slate-700
+
+# Helper: export current chat as markdown
+def chat_to_markdown(messages):
+    lines = ["# MIAgent Conversation\n"]
+    for m in messages:
+        role = "User" if m.get("role") == "user" else "Assistant"
+        content = m.get("content", "").rstrip()
+        lines.append(f"**{role}:**\n\n{content}\n")
+    return "\n".join(lines)
 
 # Save current chat before switching
 def save_current_chat():
@@ -436,48 +488,153 @@ with st.sidebar:
     else:
         st.info("No previous chats")
 
+    st.markdown("---")
+
+    # Database status (from app.py pattern)
+    st.subheader("🗄️ Database Status")
+    cfr_status = "❌ Not connected"
+    ref_status = "❌ Not connected"
+    cfr_count = 0
+    ref_count = 0
+    try:
+        cfr_info = qdrant.get_collection("46_cfr_chunks")
+        cfr_status = "✅ CFR Connected"
+        cfr_count = getattr(cfr_info, "points_count", 0)
+    except Exception:
+        pass
+    try:
+        ref_info = qdrant.get_collection("reference_documents")
+        ref_status = "✅ References Connected"
+        ref_count = getattr(ref_info, "points_count", 0)
+    except Exception:
+        pass
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.metric("CFR Sections", f"{cfr_count:,}")
+        st.caption(cfr_status)
+    with c2:
+        st.metric("Reference Docs", f"{ref_count:,}")
+        st.caption(ref_status)
+
+    st.markdown("---")
+
+    # Settings
+    st.subheader("⚙️ Settings")
+    top_k = st.slider("Top results to use", min_value=5, max_value=30, value=15, step=1)
+    temperature = st.slider("Creativity (temperature)", min_value=0.0, max_value=1.0, value=0.7, step=0.05)
+
 # Add conversation tips
 if len(st.session_state.messages) == 0:
-    with st.container():
-        st.info("💡 **Tips for better conversations:**\n"
-                "- Ask follow-up questions like 'What about commercial vessels?' or 'Can you explain that further?'\n"
-                "- Reference previous topics: 'How does this relate to what we discussed about life jackets?'\n"
-                "- Request clarification: 'I don't understand the difference between...'\n"
-                "- Ask for examples: 'Can you give me a specific scenario?'")
+    st.info("💡 Click a sample to start quickly")
+    examples = [
+        "What are the 46 CFR requirements for life jackets on small passenger vessels?",
+        "Compare SOLAS abandon-ship drill requirements with 46 CFR for passenger ships.",
+        "Which ABS standards apply to steel hull construction for tugs?",
+        "What inspections are required for a 100 GT domestic passenger vessel?",
+    ]
+    ecols = st.columns(len(examples))
+    for idx, (col, ex) in enumerate(zip(ecols, examples)):
+        with col:
+            if st.button(ex, key=f"ex_{idx}"):
+                st.session_state.queued_prompt = ex
+                st.rerun()
 
 # Chat interface
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         if message["role"] == "assistant":
-            st.write(message["content"])
-            
-            # Show if it was a follow-up
-            if message.get("is_follow_up"):
-                st.success("🔄 Follow-up question - used conversation context")
+            tabs = st.tabs(["Answer", "Sources", "Context", "Debug"])
+            with tabs[0]:
+                st.markdown(message["content"])  # render markdown naturally
+                # Copy button via simple HTML/JS clipboard
+                safe = message["content"].replace("`", "\u0060")
+                st.markdown(
+                    f"<button onclick=\"navigator.clipboard.writeText(`{safe}`)\" style='margin-top:8px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;'>Copy answer</button>",
+                    unsafe_allow_html=True,
+                )
+                # Export controls
+                colx1, colx2 = st.columns(2)
+                with colx1:
+                    md_content = f"## Answer\n\n{message['content']}\n\n"
+                    st.download_button(
+                        "Export answer (Markdown)",
+                        data=md_content,
+                        file_name=f"miagent_answer_{i+1}.md",
+                        mime="text/markdown",
+                        key=f"dl_md_{i}",
+                        use_container_width=True,
+                    )
+                with colx2:
+                    import json
+                    msg_json = json.dumps(message, ensure_ascii=False, indent=2)
+                    st.download_button(
+                        "Export message (JSON)",
+                        data=msg_json,
+                        file_name=f"miagent_message_{i+1}.json",
+                        mime="application/json",
+                        key=f"dl_json_{i}",
+                        use_container_width=True,
+                    )
+            with tabs[1]:
+                # Sources
+                clist = message.get("citations_list") or []
+                if not clist:
+                    st.info("No sources to display for this answer.")
+                else:
+                    st.caption(f"Total unique sources: {len(clist)}")
+                    for j, src in enumerate(clist, start=1):
+                        label, color = classify_source(src)
+                        st.markdown(
+                            f"<span style='display:inline-block;padding:2px 8px;border-radius:999px;background:{color};color:white;font-size:12px;margin-right:8px;'>{label}</span> {j}. {src}",
+                            unsafe_allow_html=True,
+                        )
+            with tabs[2]:
+                # Context
+                if message.get("context"):
+                    with st.expander("View retrieved context", expanded=False):
+                        st.text(message["context"])
+                else:
+                    st.caption("No context captured for this message.")
+            with tabs[3]:
+                # Debug info
+                if message.get("is_follow_up"):
+                    st.success("🔄 Follow-up question - used conversation context")
+                st.write({
+                    "citations": message.get("citations"),
+                    "sources_searched": message.get("sources_searched"),
+                    "cfr_results": message.get("cfr_results"),
+                    "ref_results": message.get("ref_results"),
+                })
         else:
             st.write(message["content"])
 
 # Chat input
-if prompt := st.chat_input("Continue our conversation about maritime regulations..."):
+def handle_prompt(prompt_text: str):
     # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.messages.append({"role": "user", "content": prompt_text})
     
     # Display user message
     with st.chat_message("user"):
-        st.write(prompt)
+        st.write(prompt_text)
 
     # Display assistant response
     with st.chat_message("assistant"):
         with st.spinner("Thinking and searching regulatory databases..."):
             # Search with conversation context
-            search_results = search_with_context(prompt, st.session_state.messages[:-1])  # Exclude current user message
+            search_results = search_with_context(prompt_text, st.session_state.messages[:-1], search_limit=top_k)  # Exclude current user message
             
             # Generate conversational response
-            result = generate_conversational_response(prompt, search_results, st.session_state.messages[:-1])
+            result = generate_conversational_response(
+                prompt_text,
+                search_results,
+                st.session_state.messages[:-1],
+                temperature_override=temperature,
+            )
             
             # Debug: Check if we have an answer
-            if result["answer"]:
-                st.write(result["answer"])
+            if result.get("answer"):
+                st.markdown(result["answer"])
             else:
                 st.error("No response generated. Please try again.")
                 st.write(f"Debug - Search results: {search_results.get('citations', 0)} sources found")
@@ -485,10 +642,11 @@ if prompt := st.chat_input("Continue our conversation about maritime regulations
             # Store full result in session state
             st.session_state.messages.append({
                 "role": "assistant", 
-                "content": result["answer"],
-                "context": result["context"],
-                "citations": result["citations"],
+                "content": result.get("answer", ""),
+                "context": result.get("context", ""),
+                "citations": result.get("citations", 0),
                 "citations_list": result.get("citations_list", []),
+                "sources_searched": result.get("sources_searched", []),
                 "cfr_results": result.get("cfr_results", 0),
                 "ref_results": result.get("ref_results", 0),
                 "is_follow_up": result.get("is_follow_up", False)
@@ -497,6 +655,16 @@ if prompt := st.chat_input("Continue our conversation about maritime regulations
             # Show if it was a follow-up
             if result.get("is_follow_up"):
                 st.success("🔄 Follow-up question - used conversation context")
+
+# Process queued prompt from example chips
+if st.session_state.queued_prompt:
+    qp = st.session_state.queued_prompt
+    st.session_state.queued_prompt = None
+    handle_prompt(qp)
+
+# Chat input
+if prompt := st.chat_input("Continue our conversation about maritime regulations..."):
+    handle_prompt(prompt)
 
 # Auto-save current chat when messages are added
 if st.session_state.messages:
