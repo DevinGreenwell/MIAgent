@@ -1,0 +1,11 @@
+[theme]
+# Maritime-leaning teal/blue theme
+primaryColor = "#0E7490"            # teal-600
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F1F5F9" # slate-100
+textColor = "#0F172A"               # slate-900
+font = "Sans serif"
+
+[client]
+toolbarMode = "minimal"
+
