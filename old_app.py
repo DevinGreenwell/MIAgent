@@ -5,45 +5,42 @@ import pandas as pd
 from qdrant_client import QdrantClient
 from datetime import datetime
 import time
-import json
 
-# Secrets/env helpers
-def get_secret(name: str, default=None):
-    if name in st.secrets:
-        return st.secrets[name]
-    return os.getenv(name, default)
-
-def get_openai_key() -> str:
-    key = get_secret("OPENAI_API_KEY")
-    if not key:
+# Initialize OpenAI with API key from Streamlit secrets or environment
+if "OPENAI_API_KEY" not in os.environ:
+    try:
+        # Try Streamlit secrets first (for cloud deployment)
+        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+    except:
         try:
+            # Fallback to local API.txt file (for local development)
             with open("API.txt", "r") as f:
-                key = f.read().strip()
+                os.environ["OPENAI_API_KEY"] = f.read().strip()
         except FileNotFoundError:
-            pass
-    if not key:
-        st.error("Missing OPENAI_API_KEY. Set it in Streamlit secrets, environment, or create API.txt file.")
-        st.stop()
-    return key
+            st.error("OpenAI API key not found. Please add OPENAI_API_KEY to Streamlit secrets or create API.txt file.")
+            st.stop()
 
-openai.api_key = get_openai_key()
+openai.api_key = os.environ["OPENAI_API_KEY"]
 
 # Initialize Qdrant client
 @st.cache_resource
 def init_qdrant():
-    # Try cloud configuration from Streamlit secrets
     try:
+        # Try cloud configuration from Streamlit secrets
         if "QDRANT_HOST" in st.secrets:
             qdrant_host = st.secrets["QDRANT_HOST"]
             qdrant_api_key = st.secrets.get("QDRANT_API_KEY", None)
             
+            # Parse URL to handle different formats
             if qdrant_host.startswith("https://"):
+                # For cloud URLs like https://cluster.region.cloud.qdrant.io
                 return QdrantClient(
                     url=qdrant_host,
                     api_key=qdrant_api_key,
                     timeout=30.0
                 )
             else:
+                # For host:port format
                 return QdrantClient(
                     host=qdrant_host,
                     port=6333,
@@ -51,20 +48,23 @@ def init_qdrant():
                     timeout=30.0
                 )
                 
-        # Try URL format
-        url = get_secret("QDRANT_URL")
-        api_key = get_secret("QDRANT_API_KEY")
-        if url:
-            return QdrantClient(url=url, api_key=api_key) if api_key else QdrantClient(url=url)
-            
+        elif "qdrant" in st.secrets:
+            return QdrantClient(
+                host=st.secrets["qdrant"]["host"],
+                port=st.secrets["qdrant"].get("port", 6333),
+                api_key=st.secrets["qdrant"].get("api_key", None),
+                timeout=30.0
+            )
     except Exception as cloud_error:
         st.warning(f"Cloud Qdrant connection failed: {cloud_error}")
     
-    # Fallback to localhost
+    # Fallback to localhost (for local development)
     try:
         return QdrantClient(host="localhost", port=6333, timeout=10.0)
     except Exception as local_error:
-        st.error("Cannot connect to any Qdrant database.")
+        st.error(f"Cannot connect to any Qdrant database.")
+        st.error(f"Cloud error: {cloud_error if 'cloud_error' in locals() else 'No cloud config'}")
+        st.error(f"Local error: {local_error}")
         st.info("For local development: Start Qdrant with `docker run -p 6333:6333 qdrant/qdrant`")
         st.info("For cloud deployment: Add Qdrant Cloud credentials to Streamlit secrets")
         st.info("Required secrets: QDRANT_HOST and QDRANT_API_KEY")
@@ -95,6 +95,7 @@ def get_conversation_context(conversation_history, limit=4):
     if not conversation_history:
         return ""
     
+    # Get last few exchanges
     recent_messages = conversation_history[-limit:]
     context_parts = []
     
@@ -102,6 +103,7 @@ def get_conversation_context(conversation_history, limit=4):
         if msg["role"] == "user":
             context_parts.append(f"User previously asked: {msg['content']}")
         elif msg["role"] == "assistant":
+            # Truncate long responses for context
             content = msg['content'][:300] + "..." if len(msg['content']) > 300 else msg['content']
             context_parts.append(f"Assistant responded: {content}")
     
@@ -144,6 +146,7 @@ def search_with_context(query, conversation_history, search_limit=10):
             )
             
             for res in cfr_results:
+                # Extract detailed CFR citation
                 cfr_label = res.payload.get("label", "CFR Section")
                 detailed_citation = f"46 CFR {cfr_label}" if cfr_label != "CFR Section" else "46 CFR"
                 
@@ -169,9 +172,12 @@ def search_with_context(query, conversation_history, search_limit=10):
             )
             
             for res in ref_results:
+                # Create detailed reference citation
                 doc_type = res.payload.get('document_type', 'Reference')
                 doc_name = res.payload.get('document_name', 'Unknown')
+                filename = res.payload.get('filename', '')
                 
+                # Create more specific citation based on document type
                 if doc_type == "ABS Standard":
                     detailed_citation = f"ABS {doc_name}"
                 elif doc_type == "Safety of Life at Sea":
@@ -236,17 +242,13 @@ def search_with_context(query, conversation_history, search_limit=10):
             "error": str(e)
         }
 
-def generate_conversational_response(user_input, search_results, conversation_history, vessel_context=None, temperature=0.7):
+def generate_conversational_response(user_input, search_results, conversation_history):
     """Generate a conversational response using context and conversation history"""
     try:
         # Build conversation context
         conversation_context = get_conversation_context(conversation_history)
         
         # Prepare messages for GPT
-        vessel_focus = ""
-        if vessel_context and vessel_context.get('type'):
-            vessel_focus = f"\nVESSEL FOCUS: The inspector is currently working with {vessel_context['type']} ({vessel_context['category']}). Tailor your regulatory guidance specifically to this vessel type and applicable subchapter requirements."
-        
         messages = [
             {
                 "role": "system",
@@ -257,7 +259,8 @@ RESPONSE STYLE:
 - Lead with the direct answer, then provide essential details only
 - Keep responses under 150 words unless specifically asked for more detail
 - Focus on what the inspector needs to know RIGHT NOW for their inspection
-{vessel_focus}
+
+{f"VESSEL FOCUS: The inspector is currently working with {st.session_state.vessel_context['type']} ({st.session_state.vessel_context['category']}). Tailor your regulatory guidance specifically to this vessel type and applicable subchapter requirements." if st.session_state.vessel_context['type'] else ""}
 
 REGULATORY APPROACH:
 - Give the specific requirement or answer first
@@ -297,27 +300,30 @@ Remember: Inspectors can always ask for more detail. Keep it streamlined for fie
 
         # Generate response with fallback
         try:
+            # Try GPT-5 Mini first
             response = openai.chat.completions.create(
-                model="gpt-5-2025-08-07",
+                model="gpt-5-mini-2025-08-07",
                 messages=messages,
-                temperature=temperature
+                max_completion_tokens=800
             )
             
+            # Check if response has content
             if not response.choices or not response.choices[0].message.content:
-                raise Exception("GPT-5 returned empty response")
+                raise Exception("GPT-5 Mini returned empty response")
                 
         except Exception as gpt5_error:
+            # Fallback to GPT-4o-mini
             try:
                 response = openai.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=messages,
                     max_tokens=800,
-                    temperature=temperature
+                    temperature=0.7
                 )
                 
                 if not response.choices or not response.choices[0].message.content:
                     return {
-                        "answer": f"Both GPT-5 and GPT-4 failed to generate responses. GPT-5 error: {str(gpt5_error)}",
+                        "answer": f"Both GPT-5 Mini and GPT-4 failed to generate responses. GPT-5 Mini error: {str(gpt5_error)}",
                         "context": search_results["context"],
                         "citations": search_results["citations"],
                         "citations_list": search_results.get("citations_list", []),
@@ -329,7 +335,7 @@ Remember: Inspectors can always ask for more detail. Keep it streamlined for fie
                     
             except Exception as gpt4_error:
                 return {
-                    "answer": f"Error: Both models failed. GPT-5: {str(gpt5_error)}, GPT-4: {str(gpt4_error)}",
+                    "answer": f"Error: Both models failed. GPT-5 Mini: {str(gpt5_error)}, GPT-4: {str(gpt4_error)}",
                     "context": search_results["context"],
                     "citations": search_results["citations"],
                     "citations_list": search_results.get("citations_list", []),
@@ -354,7 +360,7 @@ Remember: Inspectors can always ask for more detail. Keep it streamlined for fie
         import traceback
         error_details = traceback.format_exc()
         return {
-            "answer": f"I apologize, but I encountered an error while generating the response: {str(e)}",
+            "answer": f"I apologize, but I encountered an error while generating the response: {str(e)}\n\nDebug details: {error_details}",
             "context": "",
             "citations": 0,
             "citations_list": [],
@@ -363,61 +369,6 @@ Remember: Inspectors can always ask for more detail. Keep it streamlined for fie
             "ref_results": 0,
             "is_follow_up": False
         }
-
-# Helper functions for enhanced UI
-def classify_source(source: str):
-    s = (source or "").lower()
-    if s.startswith("46 cfr") or "cfr" in s:
-        return ("CFR", "#1D4ED8")
-    if s.startswith("abs"):
-        return ("ABS", "#0E7490")
-    if s.startswith("solas"):
-        return ("SOLAS", "#7C3AED")
-    if s.startswith("nvi"):
-        return ("NVIC", "#DB2777")
-    if s.startswith("msm"):
-        return ("MSM", "#059669")
-    if s.startswith("uscg"):
-        return ("USCG", "#DC2626")
-    return ("REF", "#334155")
-
-def generate_chat_title(messages):
-    """Generate a concise, contextual title for the chat based on the conversation content."""
-    try:
-        user_messages = [msg["content"] for msg in messages if msg["role"] == "user"]
-        if not user_messages:
-            return "New Chat"
-        
-        context_messages = messages[:4] if len(messages) > 4 else messages
-        conversation_text = ""
-        for msg in context_messages:
-            role = "User" if msg["role"] == "user" else "Assistant"
-            content = msg["content"][:200] + "..." if len(msg["content"]) > 200 else msg["content"]
-            conversation_text += f"{role}: {content}\n"
-        
-        response = openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system", 
-                    "content": "You are a title generator for maritime regulatory conversations. Create a short, descriptive title (3-7 words) that captures the main topic or question being discussed. Focus on maritime regulations, vessel requirements, safety standards, or inspection topics. Examples: 'Life Ring Requirements', 'Propeller Inspection Standards', 'Towing Vessel Regulations', 'Safety Equipment Guidelines'."
-                },
-                {
-                    "role": "user", 
-                    "content": f"Generate a short title for this maritime regulatory conversation:\n\n{conversation_text}"
-                }
-            ],
-            max_tokens=20,
-            temperature=0.3
-        )
-        
-        title = response.choices[0].message.content.strip()
-        title = title.strip('"').strip("'")
-        return title[:60] if len(title) > 60 else title
-        
-    except Exception as e:
-        first_message = user_messages[0] if user_messages else "New Chat"
-        return first_message[:50] + "..." if len(first_message) > 50 else first_message
 
 # Streamlit UI
 st.set_page_config(
@@ -453,11 +404,6 @@ st.markdown("""
         display: none;
         margin: 0;
         padding: 0;
-    }
-    
-    /* Enhanced chat message styling */
-    [data-testid="stChatMessage"] .stMarkdown { 
-        padding: 0.25rem 0; 
     }
     
     /* Mobile optimization */
@@ -497,6 +443,11 @@ st.markdown("""
             line-height: 1.2 !important;
             position: relative !important;
             z-index: 1000 !important;
+        }
+        
+        /* Hide desktop-only elements on mobile */
+        .desktop-only {
+            display: none !important;
         }
         
         /* Optimize column layout for mobile */
@@ -549,6 +500,7 @@ st.markdown('<h1 class="mobile-title">MIAgent</h1>', unsafe_allow_html=True)
 st.caption("Select vessel type or system to receive targeted regulatory guidance")
 
 # Create vessel type selector - responsive layout
+# Use different column layouts for desktop vs mobile
 col1, col2, col3 = st.columns([1, 2, 1])
 
 with col1:
@@ -612,10 +564,11 @@ else:
 
 st.divider()
 
-# Initialize session state for chat management
+# Initialize session state for chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Initialize session state for chat management
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = {}
     
@@ -625,13 +578,58 @@ if "current_chat_id" not in st.session_state:
 if "chat_counter" not in st.session_state:
     st.session_state.chat_counter = 1
 
-if "queued_prompt" not in st.session_state:
-    st.session_state.queued_prompt = None
+# Generate intelligent chat title based on conversation context
+def generate_chat_title(messages):
+    """Generate a concise, contextual title for the chat based on the conversation content."""
+    try:
+        # Get the first user message and assistant response if available
+        user_messages = [msg["content"] for msg in messages if msg["role"] == "user"]
+        if not user_messages:
+            return "New Chat"
+        
+        # For longer conversations, use the first few exchanges for context
+        context_messages = messages[:4] if len(messages) > 4 else messages
+        
+        # Create a prompt for title generation
+        conversation_text = ""
+        for msg in context_messages:
+            role = "User" if msg["role"] == "user" else "Assistant"
+            content = msg["content"][:200] + "..." if len(msg["content"]) > 200 else msg["content"]
+            conversation_text += f"{role}: {content}\n"
+        
+        # Generate title using OpenAI
+        response = openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "You are a title generator for maritime regulatory conversations. Create a short, descriptive title (3-7 words) that captures the main topic or question being discussed. Focus on maritime regulations, vessel requirements, safety standards, or inspection topics. Examples: 'Life Ring Requirements', 'Propeller Inspection Standards', 'Towing Vessel Regulations', 'Safety Equipment Guidelines'."
+                },
+                {
+                    "role": "user", 
+                    "content": f"Generate a short title for this maritime regulatory conversation:\n\n{conversation_text}"
+                }
+            ],
+            max_tokens=20,
+            temperature=0.3
+        )
+        
+        title = response.choices[0].message.content.strip()
+        # Remove quotes if present and ensure reasonable length
+        title = title.strip('"').strip("'")
+        return title[:60] if len(title) > 60 else title
+        
+    except Exception as e:
+        # Fallback to truncated first message if AI fails
+        first_message = user_messages[0] if user_messages else "New Chat"
+        return first_message[:50] + "..." if len(first_message) > 50 else first_message
 
-# Chat management functions
+# Save current chat before switching
 def save_current_chat():
     if st.session_state.messages:
+        # Generate intelligent title based on conversation context
         title = generate_chat_title(st.session_state.messages)
+        
         st.session_state.chat_history[st.session_state.current_chat_id] = {
             "title": title,
             "messages": st.session_state.messages.copy(),
@@ -639,7 +637,7 @@ def save_current_chat():
         }
 
 def load_chat(chat_id):
-    save_current_chat()
+    save_current_chat()  # Save current before switching
     st.session_state.current_chat_id = chat_id
     if chat_id in st.session_state.chat_history:
         st.session_state.messages = st.session_state.chat_history[chat_id]["messages"].copy()
@@ -647,12 +645,12 @@ def load_chat(chat_id):
         st.session_state.messages = []
 
 def start_new_chat():
-    save_current_chat()
+    save_current_chat()  # Save current before starting new
     st.session_state.chat_counter += 1
     st.session_state.current_chat_id = f"chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{st.session_state.chat_counter}"
     st.session_state.messages = []
 
-# Sidebar with chat management and settings
+# Sidebar with chat management
 with st.sidebar:
     st.divider()
     
@@ -669,6 +667,7 @@ with st.sidebar:
     if st.session_state.chat_history:
         st.subheader("Chat History")
         
+        # Sort chats by timestamp (most recent first)
         sorted_chats = sorted(
             st.session_state.chat_history.items(), 
             key=lambda x: x[1]["timestamp"], 
@@ -676,10 +675,12 @@ with st.sidebar:
         )
         
         for chat_id, chat_data in sorted_chats:
+            # Create a container for each chat item
             with st.container():
                 col1, col2 = st.columns([4, 1])
                 
                 with col1:
+                    # Make the title clickable
                     if st.button(
                         f"{chat_data['title']}", 
                         key=f"load_{chat_id}",
@@ -690,6 +691,7 @@ with st.sidebar:
                         st.rerun()
                 
                 with col2:
+                    # Delete button
                     if st.button("🗑️", key=f"delete_{chat_id}", help="Delete chat"):
                         del st.session_state.chat_history[chat_id]
                         if chat_id == st.session_state.current_chat_id:
@@ -699,93 +701,20 @@ with st.sidebar:
                 st.caption(f"{chat_data['timestamp']}")
     else:
         st.info("No previous chats")
-    
-    st.divider()
-    
-    # Settings
-    st.header("Settings")
-    top_k = st.slider("Search results", 5, 30, 15, help="Number of documents to retrieve")
-    temperature = st.slider("Response creativity", 0.0, 1.0, 0.7, 0.05, help="Higher values = more creative responses")
 
-# Example chips on empty state
+# Add conversation tips
 if len(st.session_state.messages) == 0:
-    st.info("**OCMI Guidance Available:**\n"
-            "- **Regulatory Questions**: 'What are the manning requirements for this vessel type?'\n"
-            "- **Inspection Guidance**: 'What should I focus on during the safety equipment inspection?'\n"
-            "- **Compliance Issues**: 'The vessel has X deficiency - what are the regulatory options?'")
-    
-    st.info("Click a sample to start quickly")
-    examples = [
-        "What are the 46 CFR requirements for life jackets on small passenger vessels?",
-        "Compare SOLAS abandon-ship drill requirements with 46 CFR for passenger ships.",
-        "Which ABS standards apply to steel hull construction for tugs?",
-        "What inspections are required for a 100 GT domestic passenger vessel?",
-    ]
-    ecols = st.columns(len(examples))
-    for idx, (col, ex) in enumerate(zip(ecols, examples)):
-        with col:
-            if st.button(ex, key=f"ex_{idx}"):
-                st.session_state.queued_prompt = ex
-                st.rerun()
+    with st.container():
+        st.info("**OCMI Guidance Available:**\n"
+                "- **Regulatory Questions**: 'What are the manning requirements for this vessel type?'\n"
+                "- **Inspection Guidance**: 'What should I focus on during the safety equipment inspection?'\n"
+                "- **Compliance Issues**: 'The vessel has X deficiency - what are the regulatory options?'")
 
-# Chat interface with enhanced tabs
+# Chat interface
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         if message["role"] == "assistant":
-            tabs = st.tabs(["Answer", "Sources", "Context", "Debug"])
-            with tabs[0]:
-                st.markdown(message["content"])
-                safe = message["content"].replace("`", "\u0060")
-                st.markdown(
-                    f"<button onclick=\"navigator.clipboard.writeText(`{safe}`)\" style='margin-top:8px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;'>Copy answer</button>",
-                    unsafe_allow_html=True,
-                )
-                colx1, colx2 = st.columns(2)
-                with colx1:
-                    md_content = f"## Answer\n\n{message['content']}\n\n"
-                    st.download_button(
-                        "Export answer (Markdown)",
-                        data=md_content,
-                        file_name=f"miagent_answer_{i+1}.md",
-                        mime="text/markdown",
-                        key=f"dl_md_{i}",
-                        use_container_width=True,
-                    )
-                with colx2:
-                    msg_json = json.dumps(message, ensure_ascii=False, indent=2)
-                    st.download_button(
-                        "Export message (JSON)",
-                        data=msg_json,
-                        file_name=f"miagent_message_{i+1}.json",
-                        mime="application/json",
-                        key=f"dl_json_{i}",
-                        use_container_width=True,
-                    )
-            with tabs[1]:
-                clist = message.get("citations_list") or []
-                if not clist:
-                    st.info("No sources to display for this answer.")
-                else:
-                    st.caption(f"Total unique sources: {len(clist)}")
-                    for j, src in enumerate(clist, start=1):
-                        label, color = classify_source(src)
-                        st.markdown(
-                            f"<span style='display:inline-block;padding:2px 8px;border-radius:999px;background:{color};color:white;font-size:12px;margin-right:8px;'>{label}</span> {j}. {src}",
-                            unsafe_allow_html=True,
-                        )
-            with tabs[2]:
-                if message.get("context"):
-                    with st.expander("View retrieved context", expanded=False):
-                        st.text(message["context"])
-                else:
-                    st.caption("No context captured for this message.")
-            with tabs[3]:
-                st.write({
-                    "citations": message.get("citations"),
-                    "sources_searched": message.get("sources_searched"),
-                    "cfr_results": message.get("cfr_results"),
-                    "ref_results": message.get("ref_results"),
-                })
+            st.write(message["content"])
             
             # Show if it was a follow-up
             if message.get("is_follow_up"):
@@ -793,46 +722,46 @@ for i, message in enumerate(st.session_state.messages):
         else:
             st.write(message["content"])
 
-# Chat input handler
-def handle_prompt(prompt_text: str):
-    st.session_state.messages.append({"role": "user", "content": prompt_text})
+# Chat input
+if prompt := st.chat_input("Ask MIAgent a question..."):
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
     
+    # Display user message
     with st.chat_message("user"):
-        st.write(prompt_text)
+        st.write(prompt)
 
+    # Display assistant response
     with st.chat_message("assistant"):
         with st.spinner("Thinking and searching regulatory databases..."):
-            search_results = search_with_context(prompt_text, st.session_state.messages[:-1], search_limit=top_k)
-            result = generate_conversational_response(prompt_text, search_results, st.session_state.messages[:-1], 
-                                                    st.session_state.vessel_context, temperature)
+            # Search with conversation context
+            search_results = search_with_context(prompt, st.session_state.messages[:-1])  # Exclude current user message
             
+            # Generate conversational response
+            result = generate_conversational_response(prompt, search_results, st.session_state.messages[:-1])
+            
+            # Debug: Check if we have an answer
             if result["answer"]:
-                st.markdown(result["answer"])
+                st.write(result["answer"])
             else:
                 st.error("No response generated. Please try again.")
                 st.write(f"Debug - Search results: {search_results.get('citations', 0)} sources found")
             
+            # Store full result in session state
             st.session_state.messages.append({
                 "role": "assistant", 
-                "content": result.get("answer", ""),
-                "context": result.get("context", ""),
-                "citations": result.get("citations", 0),
+                "content": result["answer"],
+                "context": result["context"],
+                "citations": result["citations"],
                 "citations_list": result.get("citations_list", []),
-                "sources_searched": result.get("sources_searched", []),
                 "cfr_results": result.get("cfr_results", 0),
                 "ref_results": result.get("ref_results", 0),
                 "is_follow_up": result.get("is_follow_up", False)
             })
 
-# Process example chip queued prompt
-if st.session_state.queued_prompt:
-    qp = st.session_state.queued_prompt
-    st.session_state.queued_prompt = None
-    handle_prompt(qp)
-
-# Chat input
-if prompt := st.chat_input("Ask MIAgent a question..."):
-    handle_prompt(prompt)
+            # Show if it was a follow-up
+            if result.get("is_follow_up"):
+                st.success("Follow-up question - used conversation context")
 
 # Auto-save current chat when messages are added
 if st.session_state.messages:
