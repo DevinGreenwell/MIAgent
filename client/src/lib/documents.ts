@@ -14,10 +14,13 @@ export const COLLECTION_COLORS: Record<string, string> = {
 
 /**
  * Extract a clean document number from a document_id path.
- * e.g., "mtn/MTN.01-19.2019.05.07.guidance-on-the..." -> "MTN 01-19"
- *       "mtn/MTN.04-03.ch-4.2021.04.06.technical-..." -> "MTN 04-03 Ch 4"
- *       "nvic/NVIC-02-81-ch1-integrated-tug-..."       -> "NVIC 02-81 Ch 1"
- *       "prg/PRG.E1-02.2020.07.10.bilge-..."           -> "PRG E1-02"
+ * Examples:
+ *   "mtn/MTN.01-19.2019.05.07.guidance-..."     -> "MTN 01-19"
+ *   "mtn/MTN.04-03.ch-4.2021.04.06.technical-." -> "MTN 04-03 Ch 4"
+ *   "prg/PRG.solas-53.2021.11.12.regulation-..." -> "PRG Solas-53"
+ *   "prg/PRG.c1-01.2016.01.26.review-..."        -> "PRG C1-01"
+ *   "prg/DVG.e1-36.2021.03.26.design-..."        -> "DVG E1-36"
+ *   "nvic/NVIC-02-81-ch1-integrated-..."          -> "NVIC 02-81 Ch 1"
  */
 export function formatDocId(documentId: string): string {
   const slug = documentId.split("/").pop() || documentId;
@@ -25,18 +28,22 @@ export function formatDocId(documentId: string): string {
   // MTN: MTN.01-04.2004... or MTN-01-11-ch-2-...
   const mtn = slug.match(/^(MTN)[.\s-]?(\d{2})[.\s-](\d{2})(?:[.\s-]([Cc][Hh])[.\s-]?(\d+))?/i);
   if (mtn) {
-    const base = mtn[1] + " " + mtn[2] + "-" + mtn[3];
+    const base = mtn[1].toUpperCase() + " " + mtn[2] + "-" + mtn[3];
     return mtn[4] ? base + " Ch " + mtn[5] : base;
   }
 
-  // PRG: PRG.E1-02.2020...
-  const prg = slug.match(/^(PRG)[.\s-]?([A-Z]\d)[.\s-](\d{2})/i);
-  if (prg) return prg[1] + " " + prg[2] + "-" + prg[3];
+  // PRG/DVG with category prefix: PRG.solas-53, PRG.c1-01, DVG.e1-36
+  const prgDvg = slug.match(/^(PRG|DVG)[.\s-]?([a-zA-Z]+\d?)[.\s-]?(\d{2})/i);
+  if (prgDvg) {
+    const prefix = prgDvg[1].toUpperCase();
+    const cat = prgDvg[2].charAt(0).toUpperCase() + prgDvg[2].slice(1).toLowerCase();
+    return prefix + " " + cat + "-" + prgDvg[3];
+  }
 
-  // NVIC: NVIC-01-04-... or NVIC-02-81-ch1-...
+  // NVIC: NVIC-01-04 or NVIC-02-81-ch1
   const nvic = slug.match(/^(NVIC)[.\s-]?(\d{2})[.\s-](\d{2})(?:[.\s-]([Cc][Hh])(\d+))?/i);
   if (nvic) {
-    const base = nvic[1] + " " + nvic[2] + "-" + nvic[3];
+    const base = nvic[1].toUpperCase() + " " + nvic[2] + "-" + nvic[3];
     return nvic[4] ? base + " Ch " + nvic[5] : base;
   }
 
@@ -46,12 +53,24 @@ export function formatDocId(documentId: string): string {
 
 /**
  * Strip the leading doc ID / number prefix from a title to get just the descriptive name.
- * e.g., "MTN.01 19.2019.05.07.Guidance On The..." -> "Guidance On The..."
- *       "MTN.04 03.Ch 4.2021.04.06.Technical Support..." -> "Technical Support..."
+ * Examples:
+ *   "PRG.Solas 53.2021.11.12.Regulation 38 Alt..." -> "Regulation 38 Alt..."
+ *   "DVG.E1 36.2021.03.26.Design Verification..."  -> "Design Verification..."
+ *   "MTN.04 03.Ch 4.2021.04.06.Technical Support." -> "Technical Support..."
+ *   "33 CFR Part 160"                               -> "33 CFR Part 160" (unchanged)
  */
 export function formatTitle(title: string): string {
-  const stripped = title
-    .replace(/^[A-Z]{2,}[.\s\d/-]+(?:[Cc][Hh][.\s-]?\d+[.\s-]*)?[\d.\s-]*\.?\s*/, "")
-    .trim();
-  return stripped || title;
+  // PRG/DVG: PRG.Solas 53.2021.11.12.Title or DVG.E1 36.Title
+  const prgDvg = title.match(/^(?:PRG|DVG)[.\s]?[A-Za-z]+\d?\s?\d{2}[.\s]?(?:\d{4}[.\s]\d{2}[.\s]\d{2}[.\s]?)?(.+)/i);
+  if (prgDvg && prgDvg[1].trim().length > 1) return prgDvg[1].trim();
+
+  // MTN: MTN.01 19.2019.05.07.Title or MTN.04 03.Ch 4.2021.04.06.Title
+  const mtnMatch = title.match(/^MTN[.\s]?\d{2}[.\s]\d{2}[.\s]?(?:[Cc][Hh][.\s]?\d+[.\s]?)?(?:\d{4}[.\s]\d{2}[.\s]\d{2}[.\s]?)?(.+)/i);
+  if (mtnMatch && mtnMatch[1].trim().length > 1) return mtnMatch[1].trim();
+
+  // NVIC: NVIC 03 00 Fast Rescue Boats...
+  const nvicMatch = title.match(/^NVIC[.\s-]?\d{2}[.\s-]\d{2}[.\s-]?(?:[Cc][Hh][.\s-]?\d+[.\s-]?)?(.+)/i);
+  if (nvicMatch && nvicMatch[1].trim().length > 1) return nvicMatch[1].trim();
+
+  return title;
 }
