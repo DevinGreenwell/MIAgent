@@ -1,0 +1,40 @@
+{
+  "name": "uscg-reference-db",
+  "version": "1.0.0",
+  "description": "USCG Marine Inspector Reference Database",
+  "type": "module",
+  "scripts": {
+    "migrate": "tsx scripts/migrate.ts",
+    "ingest": "tsx scripts/ingest.ts",
+    "query": "tsx scripts/query.ts",
+    "serve": "tsx server/index.ts",
+    "dev": "tsx watch server/index.ts",
+    "client:dev": "cd client && npm run dev",
+    "client:build": "cd client && npm run build",
+    "migrate:components": "tsx scripts/migrate-components.ts",
+    "seed:components": "tsx scripts/seed-components.ts",
+    "migrate:rag": "tsx scripts/migrate-rag.ts",
+    "extract": "tsx scripts/extract-text.ts",
+    "embed": "tsx scripts/chunk-and-embed.ts",
+    "dev:all": "npm run dev & npm run client:dev"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@hono/node-server": "^1.13.0",
+    "@huggingface/transformers": "^3.0.0",
+    "@lancedb/lancedb": "^0.14.0",
+    "apache-arrow": "^18.0.0",
+    "better-sqlite3": "^11.7.0",
+    "groq-sdk": "^0.37.0",
+    "hono": "^4.7.0",
+    "pdf-parse": "^1.1.1",
+    "uuid": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/pdf-parse": "^1.1.4",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

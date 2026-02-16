@@ -1,0 +1,25 @@
+node_modules/
+dist/
+.env
+.DS_Store
+
+# Document source PDFs (large binary files)
+CFR/
+Class Rules/
+IMO/
+IO-Guidance/
+MSM/
+Marine Technical Notes/
+NVIC/
+Plan Review Guides/
+Policy Letter/
+
+# Database files
+db/*.db
+db/extracted/
+db/vectors/
+db/lance/
+*.db-journal
+*.db-wal
+*.db-shm
+*.tsbuildinfo
