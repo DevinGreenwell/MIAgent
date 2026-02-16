@@ -16,10 +16,6 @@ export const COLLECTION_COLORS: Record<string, string> = {
  * Extract the document ID portion from a full document_id path.
  * e.g., "mtn/MTN.01-19.2019.05.07.guidance-on-the..." -> "MTN.01 19.2019.05.07"
  */
-/**
- * Extract the document ID portion from a full document_id path.
- * e.g., "mtn/MTN.01-19.2019.05.07.guidance-on-the..." -> "MTN.01 19.2019.05.07"
- */
 export function formatDocId(documentId: string): string {
   const slug = documentId.split("/").pop() || documentId;
   const match = slug.match(/^([A-Z]{2,}[\d./-]+(?:ch[-.]?\d+\.?)?[\d.]+)/i);
@@ -28,10 +24,14 @@ export function formatDocId(documentId: string): string {
 
 /**
  * Strip the leading doc ID / number prefix from a title to get just the descriptive name.
- * e.g., "MTN.01 19.2019.05.07.Guidance On The Carriage..." -> "Guidance On The Carriage..."
+ * Handles MTN, PRG, NVIC, etc. patterns like:
+ *   "MTN.01 19.2019.05.07.Guidance On The..." -> "Guidance On The..."
+ *   "MTN.04 03.Ch 4.2021.04.06.Technical Support..." -> "Technical Support..."
+ *   "PRG.E1 02.2020.07.10.Bilge And Ballast..." -> "Bilge And Ballast..."
  */
 export function formatTitle(title: string): string {
-  // Remove leading ID patterns like "MTN.01 19.2019.05.07." or "NVIC.03-00."
-  const stripped = title.replace(/^[A-Z]{2,}[\d.\s/-]+(?:ch[-.\s]?\d+\.?\s*)?/i, "").replace(/^\.+/, "").trim();
+  const stripped = title
+    .replace(/^[A-Z]{2,}[.\s\d/-]+(?:[Cc][Hh][.\s-]?\d+[.\s-]*)?[\d.\s-]*\.?\s*/, "")
+    .trim();
   return stripped || title;
 }
