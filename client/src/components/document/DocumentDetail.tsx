@@ -1,18 +1,7 @@
 import { useStore } from "../../store";
 import { useDocument } from "../../api/hooks";
 import { getPdfUrl } from "../../api/client";
-
-const COLLECTION_COLORS: Record<string, string> = {
-  cfr: "bg-blue-900/50 text-blue-300",
-  nvic: "bg-green-900/50 text-green-300",
-  "policy-letter": "bg-purple-900/50 text-purple-300",
-  prg: "bg-orange-900/50 text-orange-300",
-  mtn: "bg-teal-900/50 text-teal-300",
-  "io-guidance": "bg-pink-900/50 text-pink-300",
-  "class-rules": "bg-indigo-900/50 text-indigo-300",
-  msm: "bg-yellow-900/50 text-yellow-300",
-  imo: "bg-red-900/50 text-red-300",
-};
+import { COLLECTION_COLORS, formatDocId, formatTitle } from "../../lib/documents";
 
 export default function DocumentDetail() {
   const { selectedDocumentId, setSelectedDocumentId, setPdfOpen } = useStore();
@@ -23,6 +12,8 @@ export default function DocumentDetail() {
 
   const doc = data?.data;
   if (!doc) return <div className="p-4 text-muted-foreground">Document not found.</div>;
+
+  const docLabel = formatDocId(doc.document_id);
 
   return (
     <div className="p-4 space-y-4">
@@ -35,12 +26,8 @@ export default function DocumentDetail() {
           >
             {doc.collection_id.toUpperCase()}
           </span>
-          <h2 className="text-xl font-bold text-foreground mt-1">{doc.title}</h2>
-          {doc.part_title ? (
-            <p className="text-sm text-muted-foreground mt-0.5">{doc.part_title}</p>
-          ) : (
-            <p className="text-sm text-muted-foreground mt-0.5">{doc.document_id}</p>
-          )}
+          <h2 className="text-xl font-bold text-foreground mt-1">{docLabel}</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">{formatTitle(doc.title)}</p>
         </div>
         <button
           onClick={() => setSelectedDocumentId(null)}

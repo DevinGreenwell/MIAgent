@@ -53,8 +53,8 @@ export default function ChatPane({ initialMessages }: Props) {
   const isEmpty = messages.length === 0 && !loading;
 
   return (
-    <div className="flex flex-col h-full">
-      <div ref={scrollRef} className={`flex-1 overflow-auto ${isEmpty ? "flex items-center justify-center" : ""}`}>
+    <div className="flex flex-col h-full min-h-0">
+      <div ref={scrollRef} className={`flex-1 min-h-0 overflow-y-auto ${isEmpty ? "flex items-center justify-center" : ""}`}>
         {isEmpty ? (
           <div className="w-full max-w-3xl mx-auto px-4">
             <ChatSuggestions onSelect={sendMessage} />
