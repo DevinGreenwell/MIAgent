@@ -13,21 +13,41 @@ export const COLLECTION_COLORS: Record<string, string> = {
 };
 
 /**
- * Extract the document ID portion from a full document_id path.
- * e.g., "mtn/MTN.01-19.2019.05.07.guidance-on-the..." -> "MTN.01 19.2019.05.07"
+ * Extract a clean document number from a document_id path.
+ * e.g., "mtn/MTN.01-19.2019.05.07.guidance-on-the..." -> "MTN 01-19"
+ *       "mtn/MTN.04-03.ch-4.2021.04.06.technical-..." -> "MTN 04-03 Ch 4"
+ *       "nvic/NVIC-02-81-ch1-integrated-tug-..."       -> "NVIC 02-81 Ch 1"
+ *       "prg/PRG.E1-02.2020.07.10.bilge-..."           -> "PRG E1-02"
  */
 export function formatDocId(documentId: string): string {
   const slug = documentId.split("/").pop() || documentId;
-  const match = slug.match(/^([A-Z]{2,}[\d./-]+(?:ch[-.]?\d+\.?)?[\d.]+)/i);
-  return match ? match[1].replace(/-/g, " ") : slug.replace(/-/g, " ");
+
+  // MTN: MTN.01-04.2004... or MTN-01-11-ch-2-...
+  const mtn = slug.match(/^(MTN)[.\s-]?(\d{2})[.\s-](\d{2})(?:[.\s-]([Cc][Hh])[.\s-]?(\d+))?/i);
+  if (mtn) {
+    const base = mtn[1] + " " + mtn[2] + "-" + mtn[3];
+    return mtn[4] ? base + " Ch " + mtn[5] : base;
+  }
+
+  // PRG: PRG.E1-02.2020...
+  const prg = slug.match(/^(PRG)[.\s-]?([A-Z]\d)[.\s-](\d{2})/i);
+  if (prg) return prg[1] + " " + prg[2] + "-" + prg[3];
+
+  // NVIC: NVIC-01-04-... or NVIC-02-81-ch1-...
+  const nvic = slug.match(/^(NVIC)[.\s-]?(\d{2})[.\s-](\d{2})(?:[.\s-]([Cc][Hh])(\d+))?/i);
+  if (nvic) {
+    const base = nvic[1] + " " + nvic[2] + "-" + nvic[3];
+    return nvic[4] ? base + " Ch " + nvic[5] : base;
+  }
+
+  // Fallback: clean up separators
+  return slug.replace(/[-._]/g, " ");
 }
 
 /**
  * Strip the leading doc ID / number prefix from a title to get just the descriptive name.
- * Handles MTN, PRG, NVIC, etc. patterns like:
- *   "MTN.01 19.2019.05.07.Guidance On The..." -> "Guidance On The..."
- *   "MTN.04 03.Ch 4.2021.04.06.Technical Support..." -> "Technical Support..."
- *   "PRG.E1 02.2020.07.10.Bilge And Ballast..." -> "Bilge And Ballast..."
+ * e.g., "MTN.01 19.2019.05.07.Guidance On The..." -> "Guidance On The..."
+ *       "MTN.04 03.Ch 4.2021.04.06.Technical Support..." -> "Technical Support..."
  */
 export function formatTitle(title: string): string {
   const stripped = title
