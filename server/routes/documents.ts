@@ -68,7 +68,7 @@ app.get("/documents", (c) => {
   const pages = Math.ceil(total / limit);
 
   const rows = db.prepare(`
-    SELECT d.id, d.document_id, d.title, d.filename, d.collection_id, d.subcategory, d.year, d.status
+    SELECT d.id, d.document_id, d.title, d.filename, d.collection_id, d.subcategory, d.year, d.status, d.summary
     FROM documents d
     WHERE ${where}
     ORDER BY d.collection_id,
@@ -80,6 +80,20 @@ app.get("/documents", (c) => {
           CASE
             WHEN d.document_id LIKE 'cfr/%-Part-%' THEN REPLACE(SUBSTR(d.document_id, INSTR(d.document_id, 'Part-') + 5), '/', '')
             WHEN d.document_id LIKE 'cfr/%-part%' THEN REPLACE(SUBSTR(d.document_id, INSTR(d.document_id, 'part') + 4), '/', '')
+          END
+        AS INTEGER)
+      END,
+      CASE WHEN d.collection_id = 'class-rules' THEN
+        CASE
+          WHEN d.document_id LIKE 'class-rules/ABS%' THEN 0
+          ELSE 1
+        END
+      END,
+      CASE WHEN d.collection_id = 'class-rules' THEN
+        CAST(
+          CASE
+            WHEN d.document_id LIKE 'class-rules/ABS-part%' THEN REPLACE(SUBSTR(d.document_id, INSTR(d.document_id, 'part') + 4), '/', '')
+            WHEN d.document_id LIKE 'class-rules/IACS%' THEN SUBSTR(d.document_id, INSTR(d.document_id, 'IACS') + 4)
           END
         AS INTEGER)
       END,
@@ -141,7 +155,7 @@ app.get("/search", (c) => {
   const pages = Math.ceil(total / limit);
 
   const rows = db.prepare(`
-    SELECT d.id, d.document_id, d.title, d.filename, d.collection_id, d.subcategory, d.year, d.status,
+    SELECT d.id, d.document_id, d.title, d.filename, d.collection_id, d.subcategory, d.year, d.status, d.summary,
            rank
     FROM documents d
     JOIN documents_fts fts ON fts.rowid = d.id
@@ -170,7 +184,7 @@ app.get("/documents/:id", (c) => {
   const id = parseInt(c.req.param("id"));
 
   const doc = db.prepare(`
-    SELECT id, document_id, title, filename, filepath, collection_id, subcategory, year, revision, status
+    SELECT id, document_id, title, filename, filepath, collection_id, subcategory, year, revision, status, summary
     FROM documents WHERE id = ?
   `).get(id) as Record<string, unknown> | undefined;
 

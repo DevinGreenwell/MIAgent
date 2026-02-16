@@ -37,7 +37,8 @@ db.exec(`
     subcategory TEXT,
     year INTEGER,
     revision TEXT,
-    status TEXT DEFAULT 'active'
+    status TEXT DEFAULT 'active',
+    summary TEXT
   );
 
   CREATE INDEX IF NOT EXISTS idx_documents_collection ON documents(collection_id);

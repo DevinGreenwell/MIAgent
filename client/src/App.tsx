@@ -1,11 +1,11 @@
 import { lazy, Suspense } from "react";
 import { useStore } from "./store";
 import Header from "./components/layout/Header";
-import PaneContainer from "./components/layout/PaneContainer";
 import SearchBar from "./components/search/SearchBar";
 import FilterPanel from "./components/search/FilterPanel";
 import DocumentTable from "./components/search/DocumentTable";
 import Pagination from "./components/search/Pagination";
+import CollectionCards from "./components/search/CollectionCards";
 import DocumentDetail from "./components/document/DocumentDetail";
 import PdfViewer from "./components/document/PdfViewer";
 
@@ -13,27 +13,44 @@ const ChatView = lazy(() => import("./components/chat/ChatView"));
 const EngineRoomView = lazy(() => import("./components/viewer/EngineRoomView"));
 
 function SearchView() {
-  const { selectedDocumentId, pdfOpen } = useStore();
+  const { selectedDocumentId, pdfOpen, searchQuery, filters } = useStore();
+  const showCards = !searchQuery && !filters.collection;
 
   return (
-    <PaneContainer layout={selectedDocumentId ? "two-col" : "single"}>
-      <div className="flex flex-col h-full overflow-hidden">
-        <div className="p-4 border-b border-border space-y-3">
-          <SearchBar />
-          <FilterPanel />
-        </div>
-        <div className="flex-1 overflow-auto">
-          <DocumentTable />
-        </div>
-        <Pagination />
+    <div className="grid grid-cols-[25%_35%_40%] h-full">
+      {/* Left panel: Search + Filters */}
+      <div className="flex flex-col h-full overflow-auto border-r border-border p-4 space-y-3">
+        <SearchBar />
+        <FilterPanel />
       </div>
 
-      {selectedDocumentId && (
-        <div className="flex flex-col h-full overflow-auto">
-          {pdfOpen ? <PdfViewer /> : <DocumentDetail />}
-        </div>
-      )}
-    </PaneContainer>
+      {/* Middle panel: Collection cards or document list */}
+      <div className="flex flex-col h-full overflow-hidden border-r border-border">
+        {showCards ? (
+          <div className="flex-1 overflow-auto">
+            <CollectionCards />
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 overflow-auto">
+              <DocumentTable />
+            </div>
+            <Pagination />
+          </>
+        )}
+      </div>
+
+      {/* Right panel: Document detail or empty state */}
+      <div className="flex flex-col h-full overflow-auto">
+        {selectedDocumentId ? (
+          pdfOpen ? <PdfViewer /> : <DocumentDetail />
+        ) : (
+          <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+            Select a document to view details
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

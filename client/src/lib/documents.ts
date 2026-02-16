@@ -15,15 +15,32 @@ export const COLLECTION_COLORS: Record<string, string> = {
 /**
  * Extract a clean document number from a document_id path.
  * Examples:
- *   "mtn/MTN.01-19.2019.05.07.guidance-..."     -> "MTN 01-19"
- *   "mtn/MTN.04-03.ch-4.2021.04.06.technical-." -> "MTN 04-03 Ch 4"
- *   "prg/PRG.solas-53.2021.11.12.regulation-..." -> "PRG Solas-53"
- *   "prg/PRG.c1-01.2016.01.26.review-..."        -> "PRG C1-01"
- *   "prg/DVG.e1-36.2021.03.26.design-..."        -> "DVG E1-36"
- *   "nvic/NVIC-02-81-ch1-integrated-..."          -> "NVIC 02-81 Ch 1"
+ *   "mtn/MTN.01-19.2019.05.07.guidance-..."           -> "MTN 01-19"
+ *   "mtn/MTN.04-03.ch-4.2021.04.06.technical-."       -> "MTN 04-03 Ch 4"
+ *   "prg/PRG.solas-53.2021.11.12.regulation-..."       -> "PRG Solas-53"
+ *   "prg/PRG.c1-01.2016.01.26.review-..."              -> "PRG C1-01"
+ *   "prg/DVG.e1-36.2021.03.26.design-..."              -> "DVG E1-36"
+ *   "nvic/NVIC-02-81-ch1-integrated-..."                -> "NVIC 02-81 Ch 1"
+ *   "policy-letter/CG-CVC-pol17-05"                     -> "CG CVC Pol Ltr 17-05"
+ *   "policy-letter/CG-CVC-pol13-04-ch1"                 -> "CG CVC Pol Ltr 13-04 (CH-1)"
+ *   "class-rules/ABS-part1"                              -> "ABS Part 1"
+ *   "class-rules/IACS47"                                 -> "IACS No. 47"
  */
 export function formatDocId(documentId: string): string {
   const slug = documentId.split("/").pop() || documentId;
+
+  // Class Rules: ABS-partN or IACS{N}
+  const absPart = slug.match(/^(ABS)-part(\d+)/i);
+  if (absPart) return absPart[1].toUpperCase() + " Part " + absPart[2];
+  const iacs = slug.match(/^(IACS)(\d+)/i);
+  if (iacs) return iacs[1].toUpperCase() + " No. " + iacs[2];
+
+  // Policy Letter: CG-CVC-polXX-YY or CG-CVC-polXX-YY-chN or CG-CVC-polXX-YY-revN
+  const pol = slug.match(/^CG-CVC-pol(\d{2})-(\d{2})(?:-(ch)(\d+))?/i);
+  if (pol) {
+    const base = "CG CVC Pol Ltr " + pol[1] + "-" + pol[2];
+    return pol[3] ? base + " (CH-" + pol[4] + ")" : base;
+  }
 
   // MTN: MTN.01-04.2004... or MTN-01-11-ch-2-...
   const mtn = slug.match(/^(MTN)[.\s-]?(\d{2})[.\s-](\d{2})(?:[.\s-]([Cc][Hh])[.\s-]?(\d+))?/i);

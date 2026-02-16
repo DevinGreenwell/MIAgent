@@ -12,6 +12,7 @@ export interface Document {
   subcategory: string | null;
   year: number | null;
   status: string | null;
+  summary: string | null;
   part_title?: string | null;
 }
 
