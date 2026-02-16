@@ -12,6 +12,7 @@ const COMPONENT_SUGGESTIONS: Record<string, string[]> = {
     "What are the inspection requirements for this component?",
     "What deficiencies should I look for here?",
     "Which CFR sections apply to this component?",
+    "Help me write a deficiency for this component",
   ],
 };
 
