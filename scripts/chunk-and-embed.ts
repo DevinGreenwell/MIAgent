@@ -1,46 +1,72 @@
 /**
  * Chunk extracted text and generate embeddings for vector search.
- * Processes documents in batches to avoid memory issues.
- * Run: npm run embed
+ * Uses OpenAI text-embedding-3-small (1536 dims).
+ *
+ * Usage:
+ *   npm run embed                  # process all documents with extracted text
+ *   npm run embed -- --doc 577     # process a single document by ID
  */
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
-import { pipeline } from "@huggingface/transformers";
 import * as lancedb from "@lancedb/lancedb";
+import { embedBatch } from "../server/lib/embeddings.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
 const DB_PATH = path.join(ROOT, "db", "miagent.db");
 
+// Parse CLI args
+const args = process.argv.slice(2);
+const docFlagIdx = args.indexOf("--doc");
+const singleDocId = docFlagIdx !== -1 ? Number(args[docFlagIdx + 1]) : null;
+
+if (singleDocId !== null && isNaN(singleDocId)) {
+  console.error("Invalid --doc value. Usage: npm run embed -- --doc 577");
+  process.exit(1);
+}
+
+// Verify OpenAI API key
+if (!process.env.OPENAI_API_KEY) {
+  console.error("OPENAI_API_KEY environment variable is required.");
+  process.exit(1);
+}
+
 const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
 
-console.log("Loading embedding model...");
-const embedder = await pipeline(
-  "feature-extraction",
-  "Xenova/all-MiniLM-L6-v2",
-  { dtype: "q8" }
-);
-console.log("Model loaded.\n");
+// Get document IDs to process
+let docIds: Array<{ id: number }>;
 
-// Get document IDs with extracted text
-const docIds = db
-  .prepare(
-    `SELECT d.id FROM documents d
-     JOIN document_text dt ON dt.document_id = d.id
-     WHERE dt.content IS NOT NULL AND dt.content != ''`
-  )
-  .all() as Array<{ id: number }>;
+if (singleDocId !== null) {
+  const exists = db
+    .prepare(
+      `SELECT d.id FROM documents d
+       JOIN document_text dt ON dt.document_id = d.id
+       WHERE d.id = ? AND dt.content IS NOT NULL AND dt.content != ''`
+    )
+    .get(singleDocId) as { id: number } | undefined;
 
-console.log(`Processing ${docIds.length} documents...\n`);
+  if (!exists) {
+    console.error(`Document ${singleDocId} not found or has no extracted text.`);
+    process.exit(1);
+  }
+  docIds = [exists];
+  console.log(`Processing single document: ${singleDocId}`);
+} else {
+  docIds = db
+    .prepare(
+      `SELECT d.id FROM documents d
+       JOIN document_text dt ON dt.document_id = d.id
+       WHERE dt.content IS NOT NULL AND dt.content != ''`
+    )
+    .all() as Array<{ id: number }>;
+  console.log(`Processing ${docIds.length} documents...`);
+}
 
-const CHUNK_SIZE = 500;
-const CHUNK_OVERLAP = 100;
-const CHARS_PER_CHUNK = CHUNK_SIZE * 4;
-const OVERLAP_CHARS = CHUNK_OVERLAP * 4;
-const EMBED_BATCH_SIZE = 8;
-const DOC_BATCH_SIZE = 20;
+const CHARS_PER_CHUNK = 2000; // ~500 tokens
+const OVERLAP_CHARS = 400; // ~100 tokens
+const EMBED_BATCH_SIZE = 50; // OpenAI handles larger batches efficiently
 
 interface ChunkRecord {
   vector: number[];
@@ -55,14 +81,14 @@ interface ChunkRecord {
 const lanceDbPath = path.join(ROOT, "db", "lance");
 const lanceDb = await lancedb.connect(lanceDbPath);
 
+// Check if table already exists
+let tableExists = false;
 try {
-  await lanceDb.dropTable("chunks");
+  await lanceDb.openTable("chunks");
+  tableExists = true;
 } catch {
-  // Table may not exist
+  // Table doesn't exist yet
 }
-
-let totalChunks = 0;
-let tableCreated = false;
 
 const getDoc = db.prepare(
   `SELECT d.id, d.document_id, d.title, d.collection_id, dt.content
@@ -71,75 +97,93 @@ const getDoc = db.prepare(
    WHERE d.id = ?`
 );
 
-for (let batchStart = 0; batchStart < docIds.length; batchStart += DOC_BATCH_SIZE) {
-  const batchDocIds = docIds.slice(batchStart, batchStart + DOC_BATCH_SIZE);
-  const records: ChunkRecord[] = [];
+let totalChunks = 0;
 
-  // Chunk this batch of documents
-  for (const { id } of batchDocIds) {
-    const doc = getDoc.get(id) as {
-      id: number;
-      document_id: string;
-      title: string;
-      collection_id: string;
-      content: string;
-    } | undefined;
+for (const { id } of docIds) {
+  const doc = getDoc.get(id) as {
+    id: number;
+    document_id: string;
+    title: string;
+    collection_id: string;
+    content: string;
+  } | undefined;
 
-    if (!doc) continue;
+  if (!doc) continue;
 
-    const text = doc.content;
-    let start = 0;
-    let chunkIndex = 0;
+  console.log(`\n📄 Document ${doc.id} — ${doc.title} (${doc.content.length.toLocaleString()} chars)`);
 
-    while (start < text.length) {
-      const end = Math.min(start + CHARS_PER_CHUNK, text.length);
-      const chunkText = text.slice(start, end).trim();
-
-      if (chunkText.length > 20) {
-        records.push({
-          vector: [], // placeholder
-          document_id: doc.id,
-          document_ref: doc.document_id,
-          title: doc.title,
-          collection_id: doc.collection_id,
-          chunk_index: chunkIndex,
-          text: chunkText.slice(0, 1000),
-        });
-        chunkIndex++;
-      }
-
-      start = end - OVERLAP_CHARS;
-      if (start >= text.length - 50) break;
+  // If appending to existing table, remove old chunks for this document first
+  if (tableExists) {
+    try {
+      const tbl = await lanceDb.openTable("chunks");
+      await tbl.delete(`document_id = ${doc.id}`);
+    } catch {
+      // Ignore delete errors
     }
   }
 
-  // Generate embeddings for this batch of chunks
-  for (let i = 0; i < records.length; i += EMBED_BATCH_SIZE) {
-    const batch = records.slice(i, i + EMBED_BATCH_SIZE);
-    const texts = batch.map((c) => c.text.slice(0, 512));
-    const output = await embedder(texts, { pooling: "mean", normalize: true });
+  // Process in streaming sub-batches to avoid OOM on large documents.
+  // Chunk FLUSH_SIZE texts at a time, embed them, write to LanceDB, then discard.
+  const FLUSH_SIZE = 50;
+  const text = doc.content;
+  let start = 0;
+  let chunkIndex = 0;
+  let batch: ChunkRecord[] = [];
+  let docChunks = 0;
 
+  const flushBatch = async () => {
+    if (batch.length === 0) return;
+    const texts = batch.map((c) => c.text);
+    const vectors = await embedBatch(texts);
+    if (!vectors) {
+      console.error("  Embedding failed — check OPENAI_API_KEY");
+      process.exit(1);
+    }
     for (let j = 0; j < batch.length; j++) {
-      batch[j].vector = Array.from(output[j].data as Float32Array);
+      batch[j].vector = vectors[j];
     }
-  }
-
-  // Write to LanceDB
-  if (records.length > 0) {
-    if (!tableCreated) {
-      await lanceDb.createTable("chunks", records);
-      tableCreated = true;
+    if (!tableExists) {
+      await lanceDb.createTable("chunks", batch);
+      tableExists = true;
     } else {
-      const table = await lanceDb.openTable("chunks");
-      await table.add(records);
+      const tbl = await lanceDb.openTable("chunks");
+      await tbl.add(batch);
     }
-    totalChunks += records.length;
+    docChunks += batch.length;
+    totalChunks += batch.length;
+    console.log(`  Embedded & stored ${docChunks} chunks so far...`);
+    batch = [];
+  };
+
+  while (start < text.length) {
+    const end = Math.min(start + CHARS_PER_CHUNK, text.length);
+    const chunkText = text.slice(start, end).trim();
+
+    if (chunkText.length > 20) {
+      batch.push({
+        vector: [],
+        document_id: doc.id,
+        document_ref: doc.document_id,
+        title: doc.title,
+        collection_id: doc.collection_id,
+        chunk_index: chunkIndex,
+        text: chunkText,
+      });
+      chunkIndex++;
+
+      if (batch.length >= FLUSH_SIZE) {
+        await flushBatch();
+      }
+    }
+
+    if (end >= text.length) break; // reached end of document
+    start = end - OVERLAP_CHARS;
   }
 
-  console.log(
-    `  Batch ${Math.floor(batchStart / DOC_BATCH_SIZE) + 1}/${Math.ceil(docIds.length / DOC_BATCH_SIZE)}: ${records.length} chunks (total: ${totalChunks})`
-  );
+  // Flush remaining
+  await flushBatch();
+  console.log(`  Total: ${docChunks} chunks`);
 }
 
-console.log(`\nStored ${totalChunks} chunk embeddings in LanceDB.`);
+console.log(`\nDone — ${totalChunks} chunks embedded and stored in LanceDB.`);
 db.close();

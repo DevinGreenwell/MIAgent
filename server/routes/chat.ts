@@ -1,8 +1,10 @@
-/** Chat routes — AI-powered chat with RAG context. */
+/** Chat routes — AI-powered chat with hybrid RAG context (vector + FTS). */
 import { Hono } from "hono";
 import Groq from "groq-sdk";
 import { v4 as uuid } from "uuid";
 import db from "../db.js";
+import { embedText } from "../lib/embeddings.js";
+import { searchChunks, type ChunkResult } from "../lib/vectorStore.js";
 
 const app = new Hono();
 
@@ -66,13 +68,53 @@ app.post("/chat", async (c) => {
     "INSERT INTO chat_messages (session_id, role, content) VALUES (?, 'user', ?)"
   ).run(sid, message);
 
-  // Build context from relevant documents (simple FTS search)
+  // --- Hybrid RAG: vector search + FTS ---
   let ragContext = "";
   const sources: Array<{ id: number; document_id: string; title: string; collection_id: string }> = [];
+  const seenDocIds = new Set<number>();
 
+  // 1. Vector search (semantic)
+  let vectorChunks: ChunkResult[] = [];
   try {
-    const searchTerms = message.split(/\s+/).slice(0, 5).map((w) => `"${w.replace(/"/g, "")}"`).join(" OR ");
-    const relevantDocs = db.prepare(`
+    const queryVector = await embedText(message);
+    if (queryVector) {
+      vectorChunks = await searchChunks(queryVector, 10);
+    }
+  } catch {
+    // Vector search unavailable — fall through to FTS
+  }
+
+  if (vectorChunks.length > 0) {
+    // Build context from chunk text (~4000 tokens worth)
+    let tokenBudget = 4000;
+    for (const chunk of vectorChunks) {
+      if (tokenBudget <= 0) break;
+
+      const chunkTokens = Math.ceil(chunk.text.length / 4);
+      ragContext += `\n\n--- ${chunk.document_ref} (${chunk.title}) [chunk ${chunk.chunk_index}] ---\n${chunk.text}`;
+      tokenBudget -= chunkTokens;
+
+      if (!seenDocIds.has(chunk.document_id)) {
+        seenDocIds.add(chunk.document_id);
+        sources.push({
+          id: chunk.document_id,
+          document_id: chunk.document_ref,
+          title: chunk.title,
+          collection_id: chunk.collection_id,
+        });
+      }
+    }
+  }
+
+  // 2. FTS search (keyword — supplements vector results)
+  try {
+    const searchTerms = message
+      .split(/\s+/)
+      .slice(0, 5)
+      .map((w) => `"${w.replace(/"/g, "")}"`)
+      .join(" OR ");
+
+    const ftsResults = db.prepare(`
       SELECT d.id, d.document_id, d.title, d.collection_id, dt.content
       FROM documents d
       LEFT JOIN document_text dt ON dt.document_id = d.id
@@ -88,18 +130,24 @@ app.post("/chat", async (c) => {
       content: string | null;
     }>;
 
-    for (const doc of relevantDocs) {
+    for (const doc of ftsResults) {
+      if (seenDocIds.has(doc.id)) continue;
+      seenDocIds.add(doc.id);
+
       sources.push({
         id: doc.id,
         document_id: doc.document_id,
         title: doc.title,
         collection_id: doc.collection_id,
       });
-      const snippet = doc.content ? doc.content.slice(0, 500) : "";
-      ragContext += `\n\n--- Document: ${doc.document_id} (${doc.title}) ---\n${snippet}`;
+
+      // Only add FTS snippet if vector search didn't provide content
+      if (vectorChunks.length === 0 && doc.content) {
+        ragContext += `\n\n--- Document: ${doc.document_id} (${doc.title}) ---\n${doc.content.slice(0, 500)}`;
+      }
     }
   } catch {
-    // FTS search failed, continue without context
+    // FTS search failed, continue with whatever we have
   }
 
   // Add component context if provided
@@ -157,7 +205,7 @@ app.post("/chat", async (c) => {
 
       const response = await groq.chat.completions.create({
         model: "openai/gpt-oss-120b",
-        max_tokens: 1024,
+        max_tokens: 2048,
         messages,
       });
 
