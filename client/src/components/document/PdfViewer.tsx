@@ -17,14 +17,14 @@ export default function PdfViewer() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 md:px-4 py-2 border-b border-border bg-card">
         <button
           onClick={() => setPdfOpen(false)}
           className="text-sm text-primary hover:underline"
         >
           ← Back to details
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
           <button
             onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
             disabled={currentPage <= 1}
@@ -42,7 +42,7 @@ export default function PdfViewer() {
           >
             ›
           </button>
-          <span className="mx-2 text-border">|</span>
+          <span className="mx-1 md:mx-2 text-border">|</span>
           <button
             onClick={() => setScale((s) => Math.max(0.5, s - 0.25))}
             className="px-2 py-1 rounded hover:bg-accent text-sm text-foreground"
@@ -58,7 +58,7 @@ export default function PdfViewer() {
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-auto flex justify-center p-4 bg-muted">
+      <div className="flex-1 overflow-auto flex justify-center p-2 md:p-4 bg-muted">
         <Document
           file={getPdfUrl(selectedDocumentId)}
           onLoadSuccess={({ numPages: n }) => setNumPages(n)}

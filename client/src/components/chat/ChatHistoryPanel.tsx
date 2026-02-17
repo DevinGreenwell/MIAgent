@@ -3,7 +3,11 @@ import { useStore } from "../../store";
 import { fetchChatSessions, deleteChatSession } from "../../api/chat";
 import type { ChatSession } from "../../types/chat";
 
-export default function ChatHistoryPanel() {
+interface Props {
+  onSessionSelect?: () => void;
+}
+
+export default function ChatHistoryPanel({ onSessionSelect }: Props) {
   const { chatSessionId, setChatSessionId } = useStore();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -23,6 +27,7 @@ export default function ChatHistoryPanel() {
 
   const handleNew = () => {
     setChatSessionId(null);
+    onSessionSelect?.();
   };
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -51,7 +56,10 @@ export default function ChatHistoryPanel() {
         {sessions.map((s) => (
           <button
             key={s.id}
-            onClick={() => setChatSessionId(s.id)}
+            onClick={() => {
+              setChatSessionId(s.id);
+              onSessionSelect?.();
+            }}
             onMouseEnter={() => setHoveredId(s.id)}
             onMouseLeave={() => setHoveredId(null)}
             className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between group ${
