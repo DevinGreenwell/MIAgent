@@ -25,9 +25,19 @@ export const COLLECTION_COLORS: Record<string, string> = {
  *   "policy-letter/CG-CVC-pol13-04-ch1"                 -> "CG CVC Pol Ltr 13-04 (CH-1)"
  *   "class-rules/ABS-part1"                              -> "ABS Part 1"
  *   "class-rules/IACS47"                                 -> "IACS No. 47"
+ *   "cfr/33-CFR-part160"                                  -> "33 CFR Part 160"
+ *   "cfr/46-CFR-Part-10"                                  -> "46 CFR Part 10"
  */
 export function formatDocId(documentId: string): string {
   const slug = documentId.split("/").pop() || documentId;
+
+  // CFR: 33-CFR-part160 or 46-CFR-Part-10
+  const cfr = slug.match(/^(\d+)-CFR-[Pp]art-?(\d+)$/);
+  if (cfr) return cfr[1] + " CFR Part " + cfr[2];
+
+  // MSM: MSM-vol2
+  const msm = slug.match(/^MSM-vol(\d+)/i);
+  if (msm) return "MSM Vol. " + msm[1];
 
   // Class Rules: ABS-partN or IACS{N}
   const absPart = slug.match(/^(ABS)-part(\d+)/i);
@@ -90,4 +100,14 @@ export function formatTitle(title: string): string {
   if (nvicMatch && nvicMatch[1].trim().length > 1) return nvicMatch[1].trim();
 
   return title;
+}
+
+/** Title-case an ALL CAPS string, preserving short words (of, and, etc.) in lowercase. */
+export function titleCase(str: string): string {
+  const minor = new Set(["a","an","and","at","but","by","for","in","of","on","or","the","to"]);
+  return str
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w, i) => (i === 0 || !minor.has(w)) ? w.charAt(0).toUpperCase() + w.slice(1) : w)
+    .join(" ");
 }

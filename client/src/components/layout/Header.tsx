@@ -2,7 +2,7 @@ import { useStore } from "../../store";
 
 const NAV_ITEMS = [
   { id: "chat" as const, label: "Chat" },
-  { id: "viewer" as const, label: "Engine Room" },
+  { id: "viewer" as const, label: "Inspect" },
   { id: "search" as const, label: "Documents" },
 ];
 
@@ -10,10 +10,10 @@ export default function Header() {
   const { activeView, setActiveView } = useStore();
 
   return (
-    <header className="bg-sidebar px-4 py-2 flex items-center gap-6 border-b border-border shrink-0">
+    <header className="bg-sidebar px-4 py-2 flex items-center border-b border-border shrink-0">
       <h1 className="text-lg font-bold text-foreground">MIAgent</h1>
 
-      <nav className="flex gap-1">
+      <nav className="flex gap-1 mx-auto">
         {NAV_ITEMS.map((item) => {
           const isActive = activeView === item.id;
           return (

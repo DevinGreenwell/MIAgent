@@ -34,6 +34,8 @@ interface AppState {
   setViewerMode: (mode: ViewerMode) => void;
   selectedSystem: number | null;
   setSelectedSystem: (id: number | null) => void;
+  selectedSubComponent: string | null;
+  setSelectedSubComponent: (name: string | null) => void;
 
   // Chat
   chatSessionId: string | null;
@@ -63,13 +65,15 @@ export const useStore = create<AppState>((set) => ({
   setPdfOpen: (pdfOpen) => set({ pdfOpen }),
 
   selectedComponent: null,
-  setSelectedComponent: (selectedComponent) => set({ selectedComponent }),
+  setSelectedComponent: (selectedComponent) => set({ selectedComponent, selectedSubComponent: null }),
   highlightedComponents: [],
   setHighlightedComponents: (highlightedComponents) => set({ highlightedComponents }),
   viewerMode: "orbit",
   setViewerMode: (viewerMode) => set({ viewerMode }),
   selectedSystem: null,
   setSelectedSystem: (selectedSystem) => set({ selectedSystem }),
+  selectedSubComponent: null,
+  setSelectedSubComponent: (selectedSubComponent) => set({ selectedSubComponent }),
 
   chatSessionId: null,
   setChatSessionId: (chatSessionId) => set({ chatSessionId }),

@@ -134,4 +134,32 @@ app.get("/components/:id/deficiencies", (c) => {
   return c.json({ data: rows });
 });
 
+// GET /deficiencies — all deficiencies, optionally filtered by system
+app.get("/deficiencies", (c) => {
+  const system = c.req.query("system");
+
+  let where = "";
+  const params: unknown[] = [];
+
+  if (system) {
+    where = "WHERE c.system_id = ?";
+    params.push(system);
+  }
+
+  const rows = db.prepare(`
+    SELECT cd.id, cd.code, cd.title, cd.description, cd.severity,
+           cd.cfr_reference, cd.remediation,
+           c.display_name as component_name, c.mesh_name,
+           s.name as system_name, s.color as system_color
+    FROM component_deficiencies cd
+    JOIN components c ON c.id = cd.component_id
+    JOIN systems s ON s.id = c.system_id
+    ${where}
+    ORDER BY s.sort_order, c.sort_order,
+      CASE cd.severity WHEN 'critical' THEN 1 WHEN 'serious' THEN 2 WHEN 'moderate' THEN 3 ELSE 4 END
+  `).all(...params);
+
+  return c.json({ data: rows });
+});
+
 export default app;

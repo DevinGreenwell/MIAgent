@@ -36,6 +36,7 @@ export default function ComponentDocs() {
         <p className="text-xs text-muted-foreground mb-3">{comp.description}</p>
       )}
 
+      <p className="text-xs font-medium text-muted-foreground mb-1">Supporting References</p>
       {comp.documents.length > 0 ? (
         <ul className="space-y-1">
           {comp.documents.map((doc) => (
@@ -57,27 +58,6 @@ export default function ComponentDocs() {
         </ul>
       ) : (
         <p className="text-xs text-muted-foreground">No supporting documents found.</p>
-      )}
-
-      {comp.deficiencies.length > 0 && (
-        <div className="mt-3">
-          <p className="text-xs font-medium text-muted-foreground mb-1">Common Deficiencies</p>
-          <ul className="space-y-1">
-            {comp.deficiencies.map((d) => (
-              <li key={d.id} className="flex items-start gap-2 text-xs text-foreground">
-                <span className={`shrink-0 mt-1 px-1 rounded font-bold text-[10px] leading-tight ${
-                  d.severity === "critical" ? "bg-red-600 text-white" :
-                  d.severity === "serious" ? "bg-orange-500 text-white" :
-                  d.severity === "moderate" ? "bg-yellow-500 text-white" :
-                  "bg-muted-foreground text-white"
-                }`}>
-                  {d.severity[0].toUpperCase()}
-                </span>
-                <span>{d.title}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
       )}
     </div>
   );

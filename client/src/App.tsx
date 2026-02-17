@@ -17,7 +17,7 @@ function SearchView() {
   const showCards = !searchQuery && !filters.collection;
 
   return (
-    <div className="grid grid-cols-[25%_35%_40%] h-full">
+    <div className="grid grid-cols-[280px_1fr_1fr] h-full">
       {/* Left panel: Search + Filters */}
       <div className="flex flex-col h-full overflow-auto border-r border-border p-4 space-y-3">
         <SearchBar />

@@ -1,6 +1,6 @@
 import { useStore } from "../../store";
 import { useDocuments, useSearch } from "../../api/hooks";
-import { COLLECTION_COLORS, formatDocId, formatTitle } from "../../lib/documents";
+import { COLLECTION_COLORS, formatDocId, formatTitle, titleCase } from "../../lib/documents";
 
 export default function DocumentTable() {
   const { searchQuery, filters, page, selectedDocumentId, setSelectedDocumentId } = useStore();
@@ -39,7 +39,7 @@ export default function DocumentTable() {
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-foreground">{docLabel}</p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {formatTitle(doc.title)}
+                  {doc.part_title ? titleCase(doc.part_title) : formatTitle(doc.title)}
                   {doc.year ? ` · ${doc.year}` : ""}
                 </p>
               </div>

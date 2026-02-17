@@ -1,21 +1,24 @@
 import { lazy, Suspense } from "react";
 import { useStore } from "../../store";
-import SystemLegend from "./SystemLegend";
+import SystemTree from "./SystemTree";
+import ModelPartTree from "./ModelPartTree";
 import ComponentDocs from "./ComponentDocs";
-import ChatPane from "../chat/ChatPane";
+import DeficiencyPanel from "./DeficiencyPanel";
 
-const EngineRoomViewer = lazy(() => import("./EngineRoomViewer"));
+const InspectViewer = lazy(() => import("./InspectViewer"));
 
 export default function EngineRoomView() {
   const { selectedComponent } = useStore();
 
   return (
-    <div className="grid grid-cols-[300px_1fr_340px] h-full">
-      {/* Left panel: systems + selected component docs */}
+    <div className="grid grid-cols-[280px_1fr_340px] h-full">
+      {/* Left panel: system tree + selected component references */}
       <div className="h-full overflow-auto border-r border-border bg-card">
-        <SystemLegend />
+        <SystemTree />
         {selectedComponent && (
           <>
+            <div className="mx-4 border-t border-border" />
+            <ModelPartTree />
             <div className="mx-4 border-t border-border" />
             <div className="pt-3">
               <ComponentDocs />
@@ -24,7 +27,7 @@ export default function EngineRoomView() {
         )}
       </div>
 
-      {/* Middle: 3D viewer */}
+      {/* Middle: 3D inspector */}
       <div className="h-full">
         <Suspense
           fallback={
@@ -33,13 +36,13 @@ export default function EngineRoomView() {
             </div>
           }
         >
-          <EngineRoomViewer />
+          <InspectViewer />
         </Suspense>
       </div>
 
-      {/* Right: chat */}
-      <div className="h-full border-l border-border">
-        <ChatPane />
+      {/* Right: inspection deficiencies */}
+      <div className="h-full overflow-auto border-l border-border">
+        <DeficiencyPanel />
       </div>
     </div>
   );

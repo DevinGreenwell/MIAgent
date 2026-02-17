@@ -1,7 +1,7 @@
 import { useStore } from "../../store";
 import { useDocument } from "../../api/hooks";
 import { getPdfUrl } from "../../api/client";
-import { COLLECTION_COLORS, formatDocId, formatTitle } from "../../lib/documents";
+import { COLLECTION_COLORS, formatDocId, formatTitle, titleCase } from "../../lib/documents";
 
 export default function DocumentDetail() {
   const { selectedDocumentId, setSelectedDocumentId, setPdfOpen } = useStore();
@@ -27,7 +27,9 @@ export default function DocumentDetail() {
             {doc.collection_id.toUpperCase()}
           </span>
           <h2 className="text-xl font-bold text-foreground mt-1">{docLabel}</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">{formatTitle(doc.title)}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {doc.part_title ? titleCase(doc.part_title) : formatTitle(doc.title)}
+          </p>
         </div>
         <button
           onClick={() => setSelectedDocumentId(null)}

@@ -97,6 +97,9 @@ app.get("/documents", (c) => {
           END
         AS INTEGER)
       END,
+      CASE WHEN d.collection_id = 'msm' THEN
+        CAST(SUBSTR(d.document_id, INSTR(d.document_id, 'vol') + 3) AS INTEGER)
+      END,
       d.year DESC, d.title
     LIMIT ? OFFSET ?
   `).all(...params, limit, offset);
