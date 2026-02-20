@@ -28,7 +28,8 @@ async function getTable(): Promise<lancedb.Table | null> {
     db = await lancedb.connect(LANCE_PATH);
     table = await db.openTable("chunks");
     return table;
-  } catch {
+  } catch (err) {
+    console.warn("LanceDB unavailable:", err);
     unavailable = true;
     return null;
   }
@@ -57,7 +58,8 @@ export async function searchChunks(
       chunk_index: r.chunk_index as number,
       _distance: r._distance as number,
     }));
-  } catch {
+  } catch (err) {
+    console.warn("Vector search failed:", err);
     return [];
   }
 }

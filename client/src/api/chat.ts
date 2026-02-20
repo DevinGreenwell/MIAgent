@@ -3,24 +3,85 @@
  * Handles chat messages, sessions, and context
  */
 
-import type { ChatRequest, ChatResponse, ChatSession } from "../types/chat";
+import type { ChatRequest, ChatSource, ChatSession } from "../types/chat";
 import type { ApiResponse } from "../types/api";
+import { parseSSEStream } from "./sse";
 
 const BASE = "/api/v1";
 
+/** Metadata sent before the text stream begins. */
+export interface StreamMetadata {
+  sessionId: string;
+  sources: ChatSource[];
+  componentRefs: string[];
+}
+
 /**
- * Send a chat message to the AI assistant
- * @param req - Chat request with message, optional session ID, and optional component context
+ * Send a chat message and stream the AI response via SSE.
+ * Calls `onMeta` once with sources/session info, then `onChunk` for each text delta.
+ * Returns a promise that resolves when the stream is complete.
  */
-export const sendChatMessage = async (req: ChatRequest): Promise<ApiResponse<ChatResponse>> => {
+export async function streamChatMessage(
+  req: ChatRequest,
+  callbacks: {
+    onMeta: (meta: StreamMetadata) => void;
+    onChunk: (text: string) => void;
+    onDone: () => void;
+    onError: (err: Error) => void;
+  },
+): Promise<void> {
   const res = await fetch(`${BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
   });
-  if (!res.ok) throw new Error(`Chat error: ${res.status}`);
-  return res.json();
-};
+
+  if (!res.ok) {
+    callbacks.onError(new Error(`Chat error: ${res.status}`));
+    return;
+  }
+
+  const contentType = res.headers.get("content-type") || "";
+
+  // Non-streaming fallback (AI not configured)
+  if (contentType.includes("application/json")) {
+    const json = await res.json();
+    callbacks.onMeta({
+      sessionId: json.data.sessionId,
+      sources: json.data.sources,
+      componentRefs: json.data.componentRefs,
+    });
+    callbacks.onChunk(json.data.message);
+    callbacks.onDone();
+    return;
+  }
+
+  // SSE stream
+  const reader = res.body?.getReader();
+  if (!reader) {
+    callbacks.onError(new Error("No response body"));
+    return;
+  }
+
+  let doneReceived = false;
+
+  await parseSSEStream(reader, {
+    metadata: (data) => {
+      try { callbacks.onMeta(JSON.parse(data)); } catch { /* ignore parse error */ }
+    },
+    text: (data) => {
+      try { callbacks.onChunk(JSON.parse(data)); } catch { callbacks.onChunk(data); }
+    },
+    done: () => {
+      doneReceived = true;
+      callbacks.onDone();
+    },
+  });
+
+  if (!doneReceived) {
+    callbacks.onDone();
+  }
+}
 
 /**
  * Fetch all chat sessions for the current user

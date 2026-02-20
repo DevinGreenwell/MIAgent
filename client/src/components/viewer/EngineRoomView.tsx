@@ -4,6 +4,7 @@ import SystemTree from "./SystemTree";
 import ModelPartTree from "./ModelPartTree";
 import ComponentDocs from "./ComponentDocs";
 import DeficiencyPanel from "./DeficiencyPanel";
+import MobilePaneTabs from "../ui/MobilePaneTabs";
 
 const InspectViewer = lazy(() => import("./InspectViewer"));
 
@@ -15,38 +16,15 @@ export default function EngineRoomView() {
 
   return (
     <div className="flex h-full min-h-0 flex-col md:grid md:grid-cols-[280px_1fr_340px]">
-      <div className="flex gap-1 border-b border-border bg-card p-2 md:hidden">
-        <button
-          onClick={() => setMobilePane("viewer")}
-          className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium ${
-            mobilePane === "viewer"
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-muted-foreground hover:bg-accent"
-          }`}
-        >
-          Viewer
-        </button>
-        <button
-          onClick={() => setMobilePane("systems")}
-          className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium ${
-            mobilePane === "systems"
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-muted-foreground hover:bg-accent"
-          }`}
-        >
-          Systems
-        </button>
-        <button
-          onClick={() => setMobilePane("deficiencies")}
-          className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium ${
-            mobilePane === "deficiencies"
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-muted-foreground hover:bg-accent"
-          }`}
-        >
-          Deficiencies
-        </button>
-      </div>
+      <MobilePaneTabs
+        tabs={[
+          { id: "viewer", label: "Viewer" },
+          { id: "systems", label: "Systems" },
+          { id: "deficiencies", label: "Deficiencies" },
+        ]}
+        active={mobilePane}
+        onChange={(id) => setMobilePane(id as InspectPane)}
+      />
 
       {/* Left panel: system tree + selected component references */}
       <div className={`${mobilePane === "systems" ? "flex" : "hidden"} min-h-0 flex-col overflow-auto border-b border-border bg-card md:flex md:border-b-0 md:border-r`}>

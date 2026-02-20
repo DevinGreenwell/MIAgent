@@ -16,8 +16,8 @@ export default function ChatHistoryPanel({ onSessionSelect }: Props) {
     try {
       const res = await fetchChatSessions();
       setSessions(res.data || []);
-    } catch {
-      // API may not be available yet
+    } catch (err) {
+      console.warn("Failed to load chat sessions:", err);
     }
   };
 
@@ -36,8 +36,8 @@ export default function ChatHistoryPanel({ onSessionSelect }: Props) {
       await deleteChatSession(id);
       setSessions((prev) => prev.filter((s) => s.id !== id));
       if (chatSessionId === id) setChatSessionId(null);
-    } catch {
-      // ignore
+    } catch (err) {
+      console.warn("Failed to delete chat session:", err);
     }
   };
 

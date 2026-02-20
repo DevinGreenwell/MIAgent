@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-type ActiveView = "chat" | "search" | "viewer";
+type ActiveView = "chat" | "search" | "viewer" | "study";
 type ViewerMode = "orbit" | "inspect";
 
 interface AppState {
@@ -12,7 +12,7 @@ interface AppState {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   filters: { collection?: string; topic?: string; vessel?: string };
-  setFilter: (key: string, value: string | undefined) => void;
+  setFilter: (key: "collection" | "topic" | "vessel", value: string | undefined) => void;
   clearFilters: () => void;
   page: number;
   setPage: (p: number) => void;

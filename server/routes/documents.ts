@@ -145,7 +145,7 @@ app.get("/search", (c) => {
     params.push(topic);
   }
 
-  const ftsQuery = q.split(/\s+/).map((w) => `"${w}"`).join(" OR ");
+  const ftsQuery = q.split(/\s+/).map((w) => `"${w.replace(/"/g, "")}"`).join(" OR ");
 
   const countRow = db.prepare(`
     SELECT COUNT(*) as total
@@ -185,6 +185,7 @@ app.get("/search", (c) => {
 // GET /documents/:id — single document with joined details
 app.get("/documents/:id", (c) => {
   const id = parseInt(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Invalid ID" }, 400);
 
   const doc = db.prepare(`
     SELECT id, document_id, title, filename, filepath, collection_id, subcategory, year, revision, status, summary
@@ -243,6 +244,7 @@ app.get("/documents/:id", (c) => {
 // GET /documents/:id/pdf — serve the PDF file
 app.get("/documents/:id/pdf", (c) => {
   const id = parseInt(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Invalid ID" }, 400);
 
   const doc = db.prepare("SELECT filepath, filename FROM documents WHERE id = ?").get(id) as
     | { filepath: string; filename: string }
@@ -252,17 +254,25 @@ app.get("/documents/:id/pdf", (c) => {
     return c.json({ error: "Document not found" }, 404);
   }
 
-  const fullPath = path.join(ROOT, doc.filepath);
+  // Path traversal protection — ensure resolved path stays within ROOT
+  const resolvedRoot = path.resolve(ROOT);
+  const fullPath = path.resolve(ROOT, doc.filepath);
+  if (!fullPath.startsWith(resolvedRoot + path.sep)) {
+    return c.json({ error: "Access denied" }, 403);
+  }
 
   if (!fs.existsSync(fullPath)) {
     return c.json({ error: "PDF file not found" }, 404);
   }
 
+  // Sanitize filename for Content-Disposition header
+  const safeFilename = path.basename(doc.filename).replace(/[^a-zA-Z0-9._-]/g, "_");
+
   const buffer = fs.readFileSync(fullPath);
   return new Response(buffer, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${doc.filename}"`,
+      "Content-Disposition": `inline; filename="${safeFilename}"`,
     },
   });
 });

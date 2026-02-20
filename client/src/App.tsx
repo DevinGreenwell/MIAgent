@@ -8,9 +8,11 @@ import Pagination from "./components/search/Pagination";
 import CollectionCards from "./components/search/CollectionCards";
 import DocumentDetail from "./components/document/DocumentDetail";
 import PdfViewer from "./components/document/PdfViewer";
+import MobilePaneTabs from "./components/ui/MobilePaneTabs";
 
 const ChatView = lazy(() => import("./components/chat/ChatView"));
 const EngineRoomView = lazy(() => import("./components/viewer/EngineRoomView"));
+const StudyView = lazy(() => import("./components/study/StudyView"));
 
 type SearchPane = "filters" | "documents" | "detail";
 
@@ -27,38 +29,15 @@ function SearchView() {
 
   return (
     <div className="flex h-full min-h-0 flex-col md:grid md:grid-cols-[280px_1fr_1fr]">
-      <div className="flex gap-1 border-b border-border bg-card p-2 md:hidden">
-        <button
-          onClick={() => setMobilePane("filters")}
-          className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium ${
-            mobilePane === "filters"
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-muted-foreground hover:bg-accent"
-          }`}
-        >
-          Filters
-        </button>
-        <button
-          onClick={() => setMobilePane("documents")}
-          className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium ${
-            mobilePane === "documents"
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-muted-foreground hover:bg-accent"
-          }`}
-        >
-          Documents
-        </button>
-        <button
-          onClick={() => setMobilePane("detail")}
-          className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium ${
-            mobilePane === "detail"
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-muted-foreground hover:bg-accent"
-          }`}
-        >
-          Details
-        </button>
-      </div>
+      <MobilePaneTabs
+        tabs={[
+          { id: "filters", label: "Filters" },
+          { id: "documents", label: "References" },
+          { id: "detail", label: "Details" },
+        ]}
+        active={mobilePane}
+        onChange={(id) => setMobilePane(id as SearchPane)}
+      />
 
       {/* Left panel: Search + Filters */}
       <div className={`${mobilePane === "filters" ? "flex" : "hidden"} min-h-0 flex-col overflow-auto border-b border-border p-4 space-y-3 md:flex md:border-b-0 md:border-r`}>
@@ -110,6 +89,7 @@ function ViewContent() {
       {activeView === "chat" && <ChatView />}
       {activeView === "viewer" && <EngineRoomView />}
       {activeView === "search" && <SearchView />}
+      {activeView === "study" && <StudyView />}
     </Suspense>
   );
 }

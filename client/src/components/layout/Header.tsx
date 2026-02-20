@@ -3,7 +3,8 @@ import { useStore } from "../../store";
 const NAV_ITEMS = [
   { id: "chat" as const, label: "Chat" },
   { id: "viewer" as const, label: "Inspect" },
-  { id: "search" as const, label: "Documents" },
+  { id: "study" as const, label: "Study" },
+  { id: "search" as const, label: "References" },
 ];
 
 export default function Header() {

@@ -1,51 +1,105 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useStore } from "../../store";
-import { sendChatMessage } from "../../api/chat";
-import type { ChatMessage as ChatMessageType } from "../../types/chat";
+import { streamChatMessage } from "../../api/chat";
+import type { ChatMessage as ChatMessageType, ChatSource } from "../../types/chat";
 import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import ChatSuggestions from "./ChatSuggestions";
+import LoadingDots from "../ui/LoadingDots";
 
 interface Props {
   initialMessages?: ChatMessageType[];
+  onSessionCreated?: (id: string) => void;
 }
 
-export default function ChatPane({ initialMessages }: Props) {
+export default function ChatPane({ initialMessages, onSessionCreated }: Props) {
   const { chatSessionId, setChatSessionId, selectedComponent } = useStore();
   const [messages, setMessages] = useState<ChatMessageType[]>(initialMessages || []);
   const [loading, setLoading] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  // Use refs to accumulate stream data without React batching issues
+  const streamTextRef = useRef("");
+  const streamSourcesRef = useRef<ChatSource[] | undefined>(undefined);
+
+  const scrollToBottom = useCallback(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, streamingText, scrollToBottom]);
 
   const sendMessage = async (text: string) => {
     const userMsg: ChatMessageType = { role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
+    setStreamingText("");
+    streamTextRef.current = "";
+    streamSourcesRef.current = undefined;
 
     try {
-      const res = await sendChatMessage({
-        message: text,
-        sessionId: chatSessionId || undefined,
-        componentContext: selectedComponent || undefined,
-      });
+      await streamChatMessage(
+        {
+          message: text,
+          sessionId: chatSessionId || undefined,
+          componentContext: selectedComponent || undefined,
+        },
+        {
+          onMeta: (meta) => {
+            // Tell ChatView this session was created here so it won't remount us
+            if (!chatSessionId && meta.sessionId) {
+              onSessionCreated?.(meta.sessionId);
+            }
+            setChatSessionId(meta.sessionId);
+            streamSourcesRef.current = meta.sources;
+          },
+          onChunk: (chunk) => {
+            streamTextRef.current += chunk;
+            setStreamingText(streamTextRef.current);
+          },
+          onDone: () => {
+            const finalText = streamTextRef.current;
+            const finalSources = streamSourcesRef.current;
 
-      setChatSessionId(res.data.sessionId);
-      const assistantMsg: ChatMessageType = {
-        role: "assistant",
-        content: res.data.message,
-        sources: res.data.sources,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
+            // Clear streaming state first
+            setStreamingText("");
+            streamTextRef.current = "";
+
+            // Add the completed message
+            if (finalText) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "assistant",
+                  content: finalText,
+                  sources: finalSources,
+                },
+              ]);
+            }
+            setLoading(false);
+          },
+          onError: (err) => {
+            console.error("Chat stream error:", err);
+            setStreamingText("");
+            streamTextRef.current = "";
+            setMessages((prev) => [
+              ...prev,
+              { role: "assistant", content: "Sorry, I encountered an error processing your request." },
+            ]);
+            setLoading(false);
+          },
+        },
+      );
     } catch (err) {
-      const errorMsg: ChatMessageType = {
-        role: "assistant",
-        content: "Sorry, I encountered an error processing your request.",
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
+      console.error("Chat error:", err);
+      setStreamingText("");
+      streamTextRef.current = "";
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Sorry, I encountered an error processing your request." },
+      ]);
       setLoading(false);
     }
   };
@@ -65,16 +119,14 @@ export default function ChatPane({ initialMessages }: Props) {
               <ChatMessage key={i} message={msg} />
             ))}
 
-            {loading && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "300ms" }} />
-                </div>
-                <span className="text-sm">Thinking...</span>
-              </div>
+            {/* Streaming message — renders progressively */}
+            {streamingText && (
+              <ChatMessage
+                message={{ role: "assistant", content: streamingText }}
+              />
             )}
+
+            {loading && !streamingText && <LoadingDots label="Thinking..." />}
           </div>
         )}
       </div>

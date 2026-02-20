@@ -106,6 +106,7 @@ app.get("/components/:idOrMesh", (c) => {
 // GET /components/:id/documents
 app.get("/components/:id/documents", (c) => {
   const id = parseInt(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Invalid ID" }, 400);
 
   const rows = db.prepare(`
     SELECT d.id, d.document_id, d.title, d.collection_id, d.year,
@@ -122,6 +123,7 @@ app.get("/components/:id/documents", (c) => {
 // GET /components/:id/deficiencies
 app.get("/components/:id/deficiencies", (c) => {
   const id = parseInt(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "Invalid ID" }, 400);
 
   const rows = db.prepare(`
     SELECT id, code, title, description, severity, cfr_reference, remediation

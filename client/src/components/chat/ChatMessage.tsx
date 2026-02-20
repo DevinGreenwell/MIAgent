@@ -15,9 +15,13 @@ export default function ChatMessage({ message }: { message: ChatMessageType }) {
       : [];
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(message.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.warn("Clipboard copy failed:", err);
+    }
   };
 
   return (
@@ -56,7 +60,7 @@ export default function ChatMessage({ message }: { message: ChatMessageType }) {
           </div>
         )}
         {sources.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-border flex flex-col gap-1.5">
+          <div className="mt-2 pt-2 border-t border-border flex flex-wrap gap-1.5">
             {sources.map((s: { id: number; document_id: string; title: string; collection_id: string }) => (
               <SourceCitation key={s.id} source={s} />
             ))}

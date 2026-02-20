@@ -9,8 +9,9 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       return await fn();
-    } catch (err: any) {
-      if (err?.status === 429 && attempt < MAX_RETRIES - 1) {
+    } catch (err) {
+      const status = (err as { status?: number })?.status;
+      if (status === 429 && attempt < MAX_RETRIES - 1) {
         const wait = Math.pow(2, attempt) * 500 + Math.random() * 500;
         await new Promise((r) => setTimeout(r, wait));
         continue;
