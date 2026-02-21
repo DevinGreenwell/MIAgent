@@ -7,8 +7,9 @@ import DocumentTable from "./components/search/DocumentTable";
 import Pagination from "./components/search/Pagination";
 import CollectionCards from "./components/search/CollectionCards";
 import DocumentDetail from "./components/document/DocumentDetail";
-import PdfViewer from "./components/document/PdfViewer";
 import MobilePaneTabs from "./components/ui/MobilePaneTabs";
+
+const PdfViewer = lazy(() => import("./components/document/PdfViewer"));
 
 const ChatView = lazy(() => import("./components/chat/ChatView"));
 const EngineRoomView = lazy(() => import("./components/viewer/EngineRoomView"));

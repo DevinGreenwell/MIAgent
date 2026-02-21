@@ -23,12 +23,17 @@ export default function ChatPane({ initialMessages, onSessionCreated }: Props) {
   const streamTextRef = useRef("");
   const streamSourcesRef = useRef<ChatSource[] | undefined>(undefined);
 
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
   const scrollToBottom = useCallback(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, []);
 
+  // Debounce scroll during streaming to avoid 10+/sec layout thrashing
   useEffect(() => {
-    scrollToBottom();
+    clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = setTimeout(scrollToBottom, streamingText ? 80 : 0);
+    return () => clearTimeout(scrollTimerRef.current);
   }, [messages, streamingText, scrollToBottom]);
 
   const sendMessage = async (text: string) => {

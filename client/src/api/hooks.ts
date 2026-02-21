@@ -58,6 +58,7 @@ export const useDocuments = (params: SearchParams) =>
     queryKey: ["documents", params],
     queryFn: () => fetchDocuments(params),
     placeholderData: keepPreviousData,
+    staleTime: 5 * 60_000,
   });
 
 /**
@@ -71,6 +72,7 @@ export const useSearch = (params: SearchParams) =>
     queryKey: ["search", params],
     queryFn: () => fetchSearch(params),
     placeholderData: keepPreviousData,
+    staleTime: 5 * 60_000,
     enabled: !!params.q,
   });
 
@@ -83,6 +85,7 @@ export const useDocument = (id: number | null) =>
   useQuery({
     queryKey: ["document", id],
     queryFn: () => fetchDocument(id!),
+    staleTime: 10 * 60_000,
     enabled: id !== null,
   });
 
@@ -93,4 +96,5 @@ export const useStats = () =>
   useQuery({
     queryKey: ["stats"],
     queryFn: fetchStats,
+    staleTime: 5 * 60_000,
   });

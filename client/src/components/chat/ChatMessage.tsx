@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage as ChatMessageType } from "../../types/chat";
 import SourceCitation from "./SourceCitation";
 
-export default function ChatMessage({ message }: { message: ChatMessageType }) {
+const remarkPlugins = [remarkGfm];
+
+export default memo(function ChatMessage({ message }: { message: ChatMessageType }) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
 
@@ -36,7 +38,7 @@ export default function ChatMessage({ message }: { message: ChatMessageType }) {
             message.content
           ) : (
             <div className="prose prose-invert prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-td:text-foreground prose-th:text-foreground prose-th:font-semibold prose-table:border-collapse prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-1.5 prose-th:border prose-th:border-border prose-th:px-3 prose-th:py-1.5 prose-th:bg-muted prose-code:text-primary prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-muted prose-pre:border prose-pre:border-border prose-a:text-primary">
-              <Markdown remarkPlugins={[remarkGfm]}>{message.content}</Markdown>
+              <Markdown remarkPlugins={remarkPlugins}>{message.content}</Markdown>
             </div>
           )}
         </div>
@@ -69,4 +71,4 @@ export default function ChatMessage({ message }: { message: ChatMessageType }) {
       </div>
     </div>
   );
-}
+});

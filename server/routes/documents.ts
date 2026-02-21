@@ -268,10 +268,12 @@ app.get("/documents/:id/pdf", (c) => {
   // Sanitize filename for Content-Disposition header
   const safeFilename = path.basename(doc.filename).replace(/[^a-zA-Z0-9._-]/g, "_");
 
-  const buffer = fs.readFileSync(fullPath);
-  return new Response(buffer, {
+  const stat = fs.statSync(fullPath);
+  const stream = fs.createReadStream(fullPath);
+  return new Response(stream as unknown as ReadableStream, {
     headers: {
       "Content-Type": "application/pdf",
+      "Content-Length": String(stat.size),
       "Content-Disposition": `inline; filename="${safeFilename}"`,
     },
   });

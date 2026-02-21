@@ -83,10 +83,12 @@ function addComponentContext(
 function buildMessages(sid: string, message: string, ragContext: string) {
   const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
 
-  // Limit history to last 50 messages to prevent unbounded memory usage
-  const history = db.prepare(
-    "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT 50"
-  ).all(sid).reverse() as Array<{ role: string; content: string }>;
+  // Fetch last 50 messages in chronological order using a subquery to limit then sort
+  const history = db.prepare(`
+    SELECT role, content FROM (
+      SELECT role, content, created_at FROM chat_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT 50
+    ) sub ORDER BY created_at ASC
+  `).all(sid) as Array<{ role: string; content: string }>;
 
   for (const msg of history) {
     messages.push({ role: msg.role as "user" | "assistant", content: msg.content });
@@ -209,9 +211,10 @@ app.post("/chat", async (c) => {
 // GET /chat/sessions
 app.get("/chat/sessions", (c) => {
   const rows = db.prepare(`
-    SELECT cs.id, cs.title, cs.created_at,
-           (SELECT COUNT(*) FROM chat_messages cm WHERE cm.session_id = cs.id) as message_count
+    SELECT cs.id, cs.title, cs.created_at, COUNT(cm.rowid) as message_count
     FROM chat_sessions cs
+    LEFT JOIN chat_messages cm ON cm.session_id = cs.id
+    GROUP BY cs.id
     ORDER BY cs.updated_at DESC
     LIMIT 50
   `).all();
