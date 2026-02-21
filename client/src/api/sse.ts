@@ -6,7 +6,8 @@ export interface SSEHandlers {
 
 /**
  * Parse an SSE response body and dispatch events to handlers.
- * Handles buffering, line splitting, and JSON parsing.
+ * Per the SSE spec, an event is terminated by a blank line.
+ * Multiple `data:` lines within one event are joined with newlines.
  */
 export async function parseSSEStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
@@ -15,6 +16,16 @@ export async function parseSSEStream(
   const decoder = new TextDecoder();
   let buffer = "";
   let currentEvent = "";
+  let dataLines: string[] = [];
+
+  function dispatchEvent() {
+    if (currentEvent && dataLines.length > 0) {
+      const handler = handlers[currentEvent];
+      if (handler) handler(dataLines.join("\n"));
+    }
+    currentEvent = "";
+    dataLines = [];
+  }
 
   while (true) {
     const { done, value } = await reader.read();
@@ -25,14 +36,19 @@ export async function parseSSEStream(
     buffer = lines.pop() || "";
 
     for (const line of lines) {
-      if (line.startsWith("event: ")) {
+      if (line === "" || line === "\r") {
+        // Blank line = end of event
+        dispatchEvent();
+      } else if (line.startsWith("event: ")) {
+        // New event type — dispatch any pending event first
+        if (dataLines.length > 0) dispatchEvent();
         currentEvent = line.slice(7).trim();
       } else if (line.startsWith("data: ")) {
-        const data = line.slice(6);
-        const handler = handlers[currentEvent];
-        if (handler) handler(data);
-        currentEvent = "";
+        dataLines.push(line.slice(6));
       }
     }
   }
+
+  // Dispatch any remaining event
+  dispatchEvent();
 }
