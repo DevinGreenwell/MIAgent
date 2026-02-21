@@ -912,8 +912,9 @@ app.get("/study/slideshow/:sessionId/export", async (c) => {
       if (hasImage) {
         // Full-page slide image (text is baked into the image)
         const imgBuf = imageBuffers.get(s.slide_index)!;
+        const mime = imgBuf[0] === 0xFF ? "image/jpeg" : "image/png";
         slide.addImage({
-          data: `image/png;base64,${imgBuf.toString("base64")}`,
+          data: `${mime};base64,${imgBuf.toString("base64")}`,
           x: 0,
           y: 0,
           w: "100%",
@@ -1061,9 +1062,12 @@ app.get("/study/slideshow/:sessionId/export", async (c) => {
     if (hasImage) {
       try {
         const imgBuf = imageBuffers.get(s.slide_index)!;
-        const pngImage = await pdfDoc.embedPng(imgBuf);
-        const dims = pngImage.scaleToFit(W, H);
-        page.drawImage(pngImage, {
+        // Gemini may return JPEG despite .png extension — try both formats
+        const image = imgBuf[0] === 0xFF
+          ? await pdfDoc.embedJpg(imgBuf)
+          : await pdfDoc.embedPng(imgBuf);
+        const dims = image.scaleToFit(W, H);
+        page.drawImage(image, {
           x: (W - dims.width) / 2,
           y: (H - dims.height) / 2,
           width: dims.width,
