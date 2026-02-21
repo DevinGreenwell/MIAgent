@@ -31,7 +31,7 @@ export const QUALIFICATIONS: QualificationDef[] = [
     fullName: "Dry Dock Inspector",
     group: "domestic",
     cfrParts: [61, 71, 91, 107, 115, 176],
-    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "class-rules"],
     studyContext:
       "Dry Dock Inspector — Conducts drydock and internal structural examinations across all vessel types. Key areas: hull plating condition, shell and bottom readings, sea valves and through-hull fittings, rudder and propeller inspection, cathodic protection, underwater hull coatings, ABS/class society coordination.",
   },

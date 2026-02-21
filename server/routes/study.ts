@@ -32,7 +32,7 @@ const QUALS: QualDef[] = [
   {
     id: "DI", label: "Dry Dock Inspector", fullName: "Dry Dock Inspector",
     cfrParts: [61, 71, 91, 107, 115, 176],
-    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "class-rules"],
     studyContext: "Dry Dock Inspector — Drydock and internal structural examinations across all vessel types. Key areas: hull plating, shell readings, sea valves, rudder/propeller, cathodic protection.",
   },
   {
