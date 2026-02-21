@@ -1,7 +1,14 @@
 /** API key authentication middleware for Hono. */
+import { timingSafeEqual } from "crypto";
 import type { Context, Next } from "hono";
 
 const API_SECRET = process.env.API_SECRET;
+
+/** Constant-time string comparison to prevent timing attacks. */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 /**
  * Bearer token auth middleware.
@@ -19,7 +26,7 @@ export async function requireAuth(c: Context, next: Next) {
   }
 
   const token = header.slice(7);
-  if (token !== API_SECRET) {
+  if (!safeEqual(token, API_SECRET)) {
     return c.json({ error: "Invalid credentials" }, 403);
   }
 

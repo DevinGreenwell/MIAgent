@@ -104,7 +104,7 @@ export const fetchSearch = (params: SearchParams = {}) => {
  * @param topic - Optional topic slug to filter by
  */
 export const fetchCoverage = (topic?: string) => {
-  const qs = topic ? `?topic=${topic}` : "";
+  const qs = topic ? `?topic=${encodeURIComponent(topic)}` : "";
   return get<ApiResponse<Array<{ id: string; name: string; doc_count: number }>>>(`/coverage${qs}`);
 };
 

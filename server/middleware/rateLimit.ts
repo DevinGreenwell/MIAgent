@@ -1,5 +1,6 @@
 /** Simple in-memory sliding-window rate limiter for Hono. */
 import type { Context, Next } from "hono";
+import { getConnInfo } from "@hono/node-server/conninfo";
 
 interface WindowEntry {
   timestamps: number[];
@@ -23,7 +24,11 @@ setInterval(() => {
  */
 export function rateLimit(maxRequests: number, windowMs: number) {
   return async (c: Context, next: Next) => {
-    const key = c.req.header("x-forwarded-for") || "unknown";
+    // Use real connection IP; only fall back to x-forwarded-for behind a trusted proxy
+    const connInfo = getConnInfo(c);
+    const key = connInfo.remote.address
+      || c.req.header("x-forwarded-for")?.split(",")[0]?.trim()
+      || "unknown";
     const now = Date.now();
     const cutoff = now - windowMs;
 
