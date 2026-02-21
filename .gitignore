@@ -23,3 +23,6 @@ db/lance/
 *.db-wal
 *.db-shm
 *.tsbuildinfo
+
+# Generated slideshow images
+data/slideshow-images/

@@ -66,3 +66,20 @@ export interface SlideshowItem {
 }
 
 export type StudyContentItem = FlashcardItem | QuizItem | ScenarioItem | SlideshowItem;
+
+// Slideshow image generation types
+
+export interface SlideshowItemWithImage extends SlideshowItem {
+  imageUrl?: string;
+  imageStatus: "pending" | "generating" | "ready" | "failed" | "skipped";
+  imagePrompt?: string;
+  imageError?: string;
+}
+
+export interface SlideshowSession {
+  sessionId: number;
+  qualId: string;
+  status: "pending" | "generating_images" | "ready" | "error";
+  slides: SlideshowItemWithImage[];
+  imagesCompleted: number;
+}

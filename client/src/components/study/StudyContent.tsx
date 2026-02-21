@@ -1,7 +1,21 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { streamStudyContent, type StudyMetadata } from "../../api/study";
+import {
+  streamStudyContent,
+  streamSlideshowImages,
+  regenerateSlideImage,
+  fetchSlideshowSession,
+  getSlideshowExportUrl,
+  type StudyMetadata,
+} from "../../api/study";
 import type { QualificationDef } from "../../lib/qualifications";
-import type { StudyContentItem, FlashcardItem, QuizItem, ScenarioItem, SlideshowItem } from "../../types/study";
+import type {
+  StudyContentItem,
+  FlashcardItem,
+  QuizItem,
+  ScenarioItem,
+  SlideshowItem,
+  SlideshowItemWithImage,
+} from "../../types/study";
 import StudyToolbar from "./StudyToolbar";
 import LoadingDots from "../ui/LoadingDots";
 
@@ -175,17 +189,40 @@ function ScenarioRenderer({ data }: { data: ScenarioItem[] }) {
   );
 }
 
-function SlideshowRenderer({ data }: { data: SlideshowItem[] }) {
+function SlideshowRenderer({
+  data,
+  imageSlides,
+  imageGenStatus,
+  imageProgress,
+  sessionId,
+  onGenerateImages,
+  onRegenerateImage,
+}: {
+  data: SlideshowItem[];
+  imageSlides: SlideshowItemWithImage[] | null;
+  imageGenStatus: "idle" | "generating" | "done" | "error";
+  imageProgress: { completed: number; total: number };
+  sessionId: number | null;
+  onGenerateImages: () => void;
+  onRegenerateImage: (slideIndex: number) => void;
+}) {
   const [index, setIndex] = useState(0);
-  const slide = data[index];
+  const slides = imageSlides || data;
+  const slide = slides[index];
   if (!slide) return null;
+
+  const imgSlide = imageSlides?.[index];
+  const hasImage = imgSlide?.imageStatus === "ready" && imgSlide.imageUrl;
+  const isGeneratingImages = imageGenStatus === "generating";
+  const imagesComplete = imageGenStatus === "done";
 
   return (
     <div className="flex flex-col gap-4 p-4">
+      {/* Header: slide counter + dots */}
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>Slide {index + 1} of {data.length}</span>
+        <span>Slide {index + 1} of {slides.length}</span>
         <div className="flex gap-1">
-          {data.map((_, i) => (
+          {slides.map((_, i) => (
             <button
               key={i}
               onClick={() => setIndex(i)}
@@ -194,44 +231,163 @@ function SlideshowRenderer({ data }: { data: SlideshowItem[] }) {
           ))}
         </div>
       </div>
+
+      {/* Image generation progress bar */}
+      {isGeneratingImages && (
+        <div className="rounded-lg border border-border bg-muted/30 p-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+            <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Generating images... {imageProgress.completed}/{imageProgress.total}
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{
+                width: imageProgress.total
+                  ? `${(imageProgress.completed / imageProgress.total) * 100}%`
+                  : "0%",
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Slide content */}
       <div className="rounded-xl border border-border bg-card p-6">
         <h3 className="mb-4 text-lg font-semibold text-foreground">{slide.title}</h3>
-        <ul className="space-y-2">
-          {slide.bullets.map((b, bi) => (
-            <li key={bi} className="flex items-start gap-2 text-sm text-foreground">
-              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-              {b}
-            </li>
-          ))}
-        </ul>
+        <div className={hasImage ? "flex gap-6" : ""}>
+          {/* Bullets */}
+          <div className={hasImage ? "flex-1 min-w-0" : ""}>
+            <ul className="space-y-2">
+              {slide.bullets.map((b, bi) => (
+                <li key={bi} className="flex items-start gap-2 text-sm text-foreground">
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                  {b}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Image */}
+          {imgSlide && (
+            <div className="flex-1 min-w-0">
+              {imgSlide.imageStatus === "ready" && imgSlide.imageUrl && (
+                <div className="group relative">
+                  <img
+                    src={imgSlide.imageUrl}
+                    alt={slide.title}
+                    className="w-full rounded-lg border border-border object-cover"
+                  />
+                  <button
+                    onClick={() => onRegenerateImage(index)}
+                    className="absolute bottom-2 right-2 rounded-md bg-black/60 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    Regenerate
+                  </button>
+                </div>
+              )}
+              {imgSlide.imageStatus === "generating" && (
+                <div className="flex h-40 items-center justify-center rounded-lg border border-border bg-muted/30">
+                  <svg className="h-6 w-6 animate-spin text-muted-foreground" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                </div>
+              )}
+              {imgSlide.imageStatus === "failed" && (
+                <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-lg border border-red-800/50 bg-red-900/10">
+                  <span className="text-xs text-red-400">Image failed</span>
+                  <button
+                    onClick={() => onRegenerateImage(index)}
+                    className="rounded-md bg-muted px-2 py-1 text-xs text-foreground hover:bg-accent"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              {imgSlide.imageStatus === "pending" && isGeneratingImages && (
+                <div className="flex h-40 items-center justify-center rounded-lg border border-border bg-muted/20">
+                  <span className="text-xs text-muted-foreground">Queued...</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Speaker notes */}
         {slide.speakerNotes && (
           <div className="mt-4 rounded-md bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
             <span className="font-semibold">Notes:</span> {slide.speakerNotes}
           </div>
         )}
+
+        {/* Citations */}
         {slide.citations && slide.citations.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {slide.citations.map((c, ci) => (
-              <span key={ci} className="text-xs text-primary">{c}</span>
+            {slide.citations.map((ci, cii) => (
+              <span key={cii} className="text-xs text-primary">{ci}</span>
             ))}
           </div>
         )}
       </div>
-      <div className="flex justify-center gap-2">
-        <button
-          onClick={() => setIndex(Math.max(0, index - 1))}
-          disabled={index === 0}
-          className="rounded-md bg-muted px-4 py-1.5 text-sm text-foreground disabled:opacity-30"
-        >
-          Previous
-        </button>
-        <button
-          onClick={() => setIndex(Math.min(data.length - 1, index + 1))}
-          disabled={index === data.length - 1}
-          className="rounded-md bg-muted px-4 py-1.5 text-sm text-foreground disabled:opacity-30"
-        >
-          Next
-        </button>
+
+      {/* Bottom toolbar: nav + actions */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setIndex(Math.max(0, index - 1))}
+            disabled={index === 0}
+            className="rounded-md bg-muted px-4 py-1.5 text-sm text-foreground disabled:opacity-30"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setIndex(Math.min(slides.length - 1, index + 1))}
+            disabled={index === slides.length - 1}
+            className="rounded-md bg-muted px-4 py-1.5 text-sm text-foreground disabled:opacity-30"
+          >
+            Next
+          </button>
+        </div>
+        <div className="flex gap-2">
+          {!imageSlides && imageGenStatus === "idle" && (
+            <button
+              onClick={onGenerateImages}
+              className="rounded-md bg-primary/10 px-3 py-1.5 text-sm text-primary hover:bg-primary/20 transition-colors"
+            >
+              Generate Images
+            </button>
+          )}
+          {sessionId && imagesComplete && (
+            <>
+              <a
+                href={getSlideshowExportUrl(sessionId, "pptx")}
+                download
+                className="rounded-md bg-muted px-3 py-1.5 text-sm text-foreground hover:bg-accent transition-colors"
+              >
+                PPTX
+              </a>
+              <a
+                href={getSlideshowExportUrl(sessionId, "pdf")}
+                download
+                className="rounded-md bg-muted px-3 py-1.5 text-sm text-foreground hover:bg-accent transition-colors"
+              >
+                PDF
+              </a>
+            </>
+          )}
+          {sessionId && imageGenStatus === "error" && (
+            <button
+              onClick={onGenerateImages}
+              className="rounded-md bg-red-900/30 px-3 py-1.5 text-sm text-red-300 hover:bg-red-900/50 transition-colors"
+            >
+              Retry All
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -248,11 +404,22 @@ export default function StudyContent({ qual, loadedContent, onGenerationComplete
   const streamTextRef = useRef("");
   const metaRef = useRef<StudyMetadata | null>(null);
 
+  // Slideshow image state
+  const [slideshowSessionId, setSlideshowSessionId] = useState<number | null>(null);
+  const [imageSlides, setImageSlides] = useState<SlideshowItemWithImage[] | null>(null);
+  const [imageGenStatus, setImageGenStatus] = useState<"idle" | "generating" | "done" | "error">("idle");
+  const [imageProgress, setImageProgress] = useState({ completed: 0, total: 0 });
+
   const resetContent = useCallback(() => {
     setParsedContent(null);
     setStreamingText("");
     setError(null);
     streamTextRef.current = "";
+    // Reset slideshow image state
+    setSlideshowSessionId(null);
+    setImageSlides(null);
+    setImageGenStatus("idle");
+    setImageProgress({ completed: 0, total: 0 });
   }, []);
 
   // Reset when qual changes
@@ -341,6 +508,105 @@ export default function StudyContent({ qual, loadedContent, onGenerationComplete
     }
   };
 
+  const handleGenerateImages = useCallback(async () => {
+    if (!qual || !parsedContent || contentType !== "slideshow") return;
+    const slides = parsedContent as SlideshowItem[];
+
+    setImageGenStatus("generating");
+    setImageProgress({ completed: 0, total: slides.length });
+
+    // Initialize image slides from text slides
+    setImageSlides(
+      slides.map((s) => ({
+        ...s,
+        imageStatus: "pending" as const,
+      })),
+    );
+
+    try {
+      await streamSlideshowImages(
+        { qualId: qual.id, slides },
+        {
+          onSession: ({ sessionId }) => {
+            setSlideshowSessionId(sessionId);
+          },
+          onPrompt: ({ slideIndex, prompt }) => {
+            setImageSlides((prev) =>
+              prev?.map((s, i) =>
+                i === slideIndex ? { ...s, imagePrompt: prompt } : s,
+              ) ?? null,
+            );
+          },
+          onProgress: ({ slideIndex, status, filename, error: err, completed, total }) => {
+            setImageProgress({ completed, total });
+            setImageSlides((prev) =>
+              prev?.map((s, i) =>
+                i === slideIndex
+                  ? {
+                      ...s,
+                      imageStatus: status,
+                      imageUrl: filename
+                        ? `/api/v1/study/slideshow/images/${filename}`
+                        : undefined,
+                      imageError: err,
+                    }
+                  : s,
+              ) ?? null,
+            );
+          },
+          onDone: ({ status }) => {
+            setImageGenStatus(status === "error" ? "error" : "done");
+          },
+          onError: (err) => {
+            setError(err.message);
+            setImageGenStatus("error");
+          },
+        },
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Image generation failed");
+      setImageGenStatus("error");
+    }
+  }, [qual, parsedContent, contentType]);
+
+  const handleRegenerateImage = useCallback(
+    async (slideIndex: number) => {
+      if (!slideshowSessionId) return;
+
+      setImageSlides((prev) =>
+        prev?.map((s, i) =>
+          i === slideIndex ? { ...s, imageStatus: "generating" as const } : s,
+        ) ?? null,
+      );
+
+      try {
+        const result = await regenerateSlideImage(slideshowSessionId, slideIndex);
+        setImageSlides((prev) =>
+          prev?.map((s, i) =>
+            i === slideIndex
+              ? {
+                  ...s,
+                  imageStatus: result.status as "ready" | "failed",
+                  imageUrl: result.filename
+                    ? `/api/v1/study/slideshow/images/${result.filename}`
+                    : s.imageUrl,
+                  imagePrompt: result.prompt || s.imagePrompt,
+                  imageError: result.error,
+                }
+              : s,
+          ) ?? null,
+        );
+      } catch {
+        setImageSlides((prev) =>
+          prev?.map((s, i) =>
+            i === slideIndex ? { ...s, imageStatus: "failed" as const } : s,
+          ) ?? null,
+        );
+      }
+    },
+    [slideshowSessionId],
+  );
+
   const renderContent = () => {
     if (!parsedContent || !contentType) return null;
 
@@ -352,7 +618,17 @@ export default function StudyContent({ qual, loadedContent, onGenerationComplete
       case "scenario":
         return <ScenarioRenderer data={parsedContent as ScenarioItem[]} />;
       case "slideshow":
-        return <SlideshowRenderer data={parsedContent as SlideshowItem[]} />;
+        return (
+          <SlideshowRenderer
+            data={parsedContent as SlideshowItem[]}
+            imageSlides={imageSlides}
+            imageGenStatus={imageGenStatus}
+            imageProgress={imageProgress}
+            sessionId={slideshowSessionId}
+            onGenerateImages={handleGenerateImages}
+            onRegenerateImage={handleRegenerateImage}
+          />
+        );
       default:
         return null;
     }

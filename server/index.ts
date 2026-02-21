@@ -4,12 +4,19 @@ import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { requireAuth } from "./middleware/auth.js";
 import { rateLimit } from "./middleware/rateLimit.js";
 import documentRoutes from "./routes/documents.js";
 import componentRoutes from "./routes/components.js";
 import chatRoutes from "./routes/chat.js";
 import studyRoutes from "./routes/study.js";
+
+// Ensure slideshow images directory exists
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+fs.mkdirSync(path.join(__dirname, "..", "data", "slideshow-images"), { recursive: true });
 
 const app = new Hono();
 
@@ -33,6 +40,8 @@ app.use("/api/*", requireAuth);
 // Rate limiting on AI-powered endpoints (10 requests per minute per IP)
 app.use("/api/v1/chat", rateLimit(10, 60_000));
 app.use("/api/v1/study/generate", rateLimit(10, 60_000));
+// Stricter limit on image generation (costs ~$0.003/image)
+app.use("/api/v1/study/slideshow/images", rateLimit(5, 60_000));
 
 // API routes under /api/v1
 app.route("/api/v1", documentRoutes);

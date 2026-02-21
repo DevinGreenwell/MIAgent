@@ -1,9 +1,16 @@
 /** Study routes — AI-powered study material generation with RAG context. */
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import db from "../db.js";
 import { anthropic, AI_MODEL } from "../lib/anthropic.js";
+import { genai, IMAGE_MODEL } from "../lib/gemini-image.js";
 import { gatherRagContext } from "../lib/ragContext.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const IMAGES_DIR = path.join(__dirname, "..", "..", "data", "slideshow-images");
 
 const app = new Hono();
 
@@ -396,5 +403,696 @@ app.delete("/study/history/:id", (c) => {
   db.prepare(`DELETE FROM study_content WHERE id = ?`).run(id);
   return c.body(null, 204);
 });
+
+// ── Slideshow image generation helpers ──────────────────────────────────────
+
+const IMAGE_PROMPT_SYSTEM = `You are an image prompt engineer. Given a presentation slide's content about USCG maritime inspection topics, create a single Flux image generation prompt.
+
+Requirements:
+- Photorealistic maritime or industrial imagery relevant to the slide topic
+- Professional lighting, high quality, detailed
+- NO text, labels, watermarks, or overlays in the image
+- NO detailed human faces (show equipment, vessels, machinery, environments instead)
+- Under 200 words
+- Focus on the visual subject matter (ships, equipment, ports, machinery, safety systems)
+
+Return ONLY the image prompt text, nothing else.`;
+
+async function generateImagePrompt(
+  slideTitle: string,
+  bullets: string[],
+): Promise<string> {
+  if (!anthropic) {
+    return fallbackImagePrompt(slideTitle);
+  }
+  try {
+    const response = await anthropic.messages.create({
+      model: AI_MODEL,
+      max_tokens: 300,
+      system: IMAGE_PROMPT_SYSTEM,
+      messages: [
+        {
+          role: "user",
+          content: `Slide title: ${slideTitle}\nKey points:\n${bullets.map((b) => `- ${b}`).join("\n")}`,
+        },
+      ],
+    });
+    const text =
+      response.content[0]?.type === "text" ? response.content[0].text : "";
+    return text.trim() || fallbackImagePrompt(slideTitle);
+  } catch {
+    return fallbackImagePrompt(slideTitle);
+  }
+}
+
+function fallbackImagePrompt(title: string): string {
+  return `Professional photorealistic image of ${title.toLowerCase()}, maritime industry, USCG inspection context, high quality, detailed, professional lighting, no text or labels`;
+}
+
+async function generateAndSaveImage(
+  sessionId: number,
+  slideIndex: number,
+  prompt: string,
+): Promise<string> {
+  const response = await genai!.models.generateContent({
+    model: IMAGE_MODEL,
+    contents: prompt,
+    config: {
+      responseModalities: ["IMAGE"],
+      imageConfig: {
+        aspectRatio: "16:9",
+      },
+    },
+  });
+
+  // Nano Banana Pro returns base64 image data inline
+  const parts = response.candidates?.[0]?.content?.parts;
+  if (!parts) throw new Error("No response from Nano Banana Pro");
+
+  const imagePart = parts.find((p: any) => p.inlineData);
+  if (!imagePart?.inlineData?.data) {
+    throw new Error("No image data in Nano Banana Pro response");
+  }
+
+  const filename = `${sessionId}-${slideIndex}.png`;
+  const filepath = path.join(IMAGES_DIR, filename);
+  fs.writeFileSync(filepath, Buffer.from(imagePart.inlineData.data, "base64"));
+
+  return filename;
+}
+
+// ── POST /study/slideshow/images — Generate images for slides (SSE) ─────────
+
+app.post("/study/slideshow/images", async (c) => {
+  const body = await c.req.json();
+  const { qualId, studyContentId, slides } = body as {
+    qualId: string;
+    studyContentId?: number;
+    slides: Array<{
+      title: string;
+      bullets: string[];
+      speakerNotes?: string;
+      citations?: string[];
+    }>;
+  };
+
+  if (!qualId || !slides?.length) {
+    return c.json({ error: "qualId and slides are required" }, 400);
+  }
+
+  if (slides.length > 20) {
+    return c.json({ error: "Maximum 20 slides" }, 400);
+  }
+
+  if (!genai) {
+    return c.json({
+      error: "Image generation not configured. Set GEMINI_API_KEY environment variable.",
+    }, 503);
+  }
+
+  // Create session
+  const sessionResult = db
+    .prepare(
+      `INSERT INTO slideshow_sessions (study_content_id, qual_id, status, slide_count) VALUES (?, ?, 'generating_images', ?)`,
+    )
+    .run(studyContentId ?? null, qualId, slides.length);
+  const sessionId = sessionResult.lastInsertRowid as number;
+
+  // Insert slide records
+  const insertSlide = db.prepare(
+    `INSERT INTO slideshow_slides (session_id, slide_index, title, bullets, speaker_notes, citations, image_status) VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+  );
+  for (let i = 0; i < slides.length; i++) {
+    const s = slides[i];
+    insertSlide.run(
+      sessionId,
+      i,
+      s.title,
+      JSON.stringify(s.bullets),
+      s.speakerNotes ?? null,
+      s.citations ? JSON.stringify(s.citations) : null,
+    );
+  }
+
+  // Ensure images directory exists
+  fs.mkdirSync(IMAGES_DIR, { recursive: true });
+
+  return streamSSE(c, async (stream) => {
+    await stream.writeSSE({
+      event: "session",
+      data: JSON.stringify({ sessionId, slideCount: slides.length }),
+    });
+
+    // Generate image prompts in parallel via Claude
+    const prompts: string[] = [];
+    const promptTasks = slides.map(async (s, i) => {
+      const prompt = await generateImagePrompt(s.title, s.bullets);
+      prompts[i] = prompt;
+
+      // Save prompt to DB
+      db.prepare(
+        `UPDATE slideshow_slides SET image_prompt = ? WHERE session_id = ? AND slide_index = ?`,
+      ).run(prompt, sessionId, i);
+
+      await stream.writeSSE({
+        event: "prompt",
+        data: JSON.stringify({ slideIndex: i, prompt }),
+      });
+    });
+    await Promise.all(promptTasks);
+
+    // Generate images with concurrency limit of 3
+    let completed = 0;
+    let failed = 0;
+    const concurrency = 3;
+    let cursor = 0;
+
+    async function processSlide(i: number) {
+      db.prepare(
+        `UPDATE slideshow_slides SET image_status = 'generating' WHERE session_id = ? AND slide_index = ?`,
+      ).run(sessionId, i);
+
+      try {
+        const filename = await generateAndSaveImage(
+          sessionId,
+          i,
+          prompts[i],
+        );
+
+        db.prepare(
+          `UPDATE slideshow_slides SET image_status = 'ready', image_filename = ? WHERE session_id = ? AND slide_index = ?`,
+        ).run(filename, sessionId, i);
+
+        completed++;
+        db.prepare(
+          `UPDATE slideshow_sessions SET images_completed = ? WHERE id = ?`,
+        ).run(completed, sessionId);
+
+        await stream.writeSSE({
+          event: "progress",
+          data: JSON.stringify({
+            slideIndex: i,
+            status: "ready",
+            filename,
+            completed,
+            total: slides.length,
+          }),
+        });
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "Unknown error";
+
+        // Retry once after 2s
+        try {
+          await new Promise((r) => setTimeout(r, 2000));
+          const filename = await generateAndSaveImage(
+            sessionId,
+            i,
+            prompts[i],
+          );
+
+          db.prepare(
+            `UPDATE slideshow_slides SET image_status = 'ready', image_filename = ? WHERE session_id = ? AND slide_index = ?`,
+          ).run(filename, sessionId, i);
+
+          completed++;
+          db.prepare(
+            `UPDATE slideshow_sessions SET images_completed = ? WHERE id = ?`,
+          ).run(completed, sessionId);
+
+          await stream.writeSSE({
+            event: "progress",
+            data: JSON.stringify({
+              slideIndex: i,
+              status: "ready",
+              filename,
+              completed,
+              total: slides.length,
+            }),
+          });
+        } catch {
+          failed++;
+          db.prepare(
+            `UPDATE slideshow_slides SET image_status = 'failed', image_error = ? WHERE session_id = ? AND slide_index = ?`,
+          ).run(errMsg, sessionId, i);
+
+          await stream.writeSSE({
+            event: "progress",
+            data: JSON.stringify({
+              slideIndex: i,
+              status: "failed",
+              error: errMsg,
+              completed,
+              total: slides.length,
+            }),
+          });
+        }
+      }
+    }
+
+    // Process slides with bounded concurrency
+    const running: Promise<void>[] = [];
+    while (cursor < slides.length) {
+      while (running.length < concurrency && cursor < slides.length) {
+        const idx = cursor++;
+        const p = processSlide(idx).then(() => {
+          running.splice(running.indexOf(p), 1);
+        });
+        running.push(p);
+      }
+      if (running.length >= concurrency) {
+        await Promise.race(running);
+      }
+    }
+    await Promise.all(running);
+
+    // Update session status
+    const finalStatus = failed === slides.length ? "error" : "ready";
+    db.prepare(`UPDATE slideshow_sessions SET status = ? WHERE id = ?`).run(
+      finalStatus,
+      sessionId,
+    );
+
+    await stream.writeSSE({
+      event: "done",
+      data: JSON.stringify({
+        sessionId,
+        status: finalStatus,
+        completed,
+        failed,
+      }),
+    });
+  });
+});
+
+// ── POST /study/slideshow/images/:sessionId/regenerate/:slideIndex ───────────
+
+app.post("/study/slideshow/images/:sessionId/regenerate/:slideIndex", async (c) => {
+  const sessionId = Number(c.req.param("sessionId"));
+  const slideIndex = Number(c.req.param("slideIndex"));
+
+  if (!Number.isFinite(sessionId) || !Number.isFinite(slideIndex)) {
+    return c.json({ error: "Invalid parameters" }, 400);
+  }
+
+  if (!genai) {
+    return c.json({ error: "Image generation not configured" }, 503);
+  }
+
+  const slide = db
+    .prepare(
+      `SELECT * FROM slideshow_slides WHERE session_id = ? AND slide_index = ?`,
+    )
+    .get(sessionId, slideIndex) as {
+    id: number;
+    title: string;
+    bullets: string;
+    image_prompt: string | null;
+  } | undefined;
+
+  if (!slide) return c.json({ error: "Slide not found" }, 404);
+
+  // Generate new prompt
+  const bullets = JSON.parse(slide.bullets) as string[];
+  const prompt = await generateImagePrompt(slide.title, bullets);
+
+  db.prepare(
+    `UPDATE slideshow_slides SET image_prompt = ?, image_status = 'generating', image_error = NULL WHERE session_id = ? AND slide_index = ?`,
+  ).run(prompt, sessionId, slideIndex);
+
+  try {
+    fs.mkdirSync(IMAGES_DIR, { recursive: true });
+    const filename = await generateAndSaveImage(sessionId, slideIndex, prompt);
+
+    db.prepare(
+      `UPDATE slideshow_slides SET image_status = 'ready', image_filename = ? WHERE session_id = ? AND slide_index = ?`,
+    ).run(filename, sessionId, slideIndex);
+
+    return c.json({ status: "ready", filename, prompt });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : "Unknown error";
+    db.prepare(
+      `UPDATE slideshow_slides SET image_status = 'failed', image_error = ? WHERE session_id = ? AND slide_index = ?`,
+    ).run(errMsg, sessionId, slideIndex);
+
+    return c.json({ status: "failed", error: errMsg }, 500);
+  }
+});
+
+// ── GET /study/slideshow/images/:filename — Serve stored images ─────────────
+
+app.get("/study/slideshow/images/:filename", (c) => {
+  const filename = c.req.param("filename");
+
+  // Path traversal protection
+  if (!filename || /[/\\]/.test(filename) || filename.includes("..")) {
+    return c.json({ error: "Invalid filename" }, 400);
+  }
+
+  if (!/^\d+-\d+\.png$/.test(filename)) {
+    return c.json({ error: "Invalid filename format" }, 400);
+  }
+
+  const filepath = path.join(IMAGES_DIR, filename);
+  if (!fs.existsSync(filepath)) {
+    return c.json({ error: "Image not found" }, 404);
+  }
+
+  const buffer = fs.readFileSync(filepath);
+  c.header("Content-Type", "image/png");
+  c.header("Cache-Control", "public, max-age=86400");
+  return c.body(new Uint8Array(buffer));
+});
+
+// ── GET /study/slideshow/:sessionId — Get session with all slides ───────────
+
+app.get("/study/slideshow/:sessionId", (c) => {
+  const sessionId = Number(c.req.param("sessionId"));
+  if (!Number.isFinite(sessionId)) {
+    return c.json({ error: "Invalid session ID" }, 400);
+  }
+
+  const session = db
+    .prepare(`SELECT * FROM slideshow_sessions WHERE id = ?`)
+    .get(sessionId) as {
+    id: number;
+    qual_id: string;
+    status: string;
+    slide_count: number;
+    images_completed: number;
+  } | undefined;
+
+  if (!session) return c.json({ error: "Session not found" }, 404);
+
+  const slides = db
+    .prepare(
+      `SELECT * FROM slideshow_slides WHERE session_id = ? ORDER BY slide_index`,
+    )
+    .all(sessionId) as Array<{
+    slide_index: number;
+    title: string;
+    bullets: string;
+    speaker_notes: string | null;
+    citations: string | null;
+    image_prompt: string | null;
+    image_filename: string | null;
+    image_status: string;
+    image_error: string | null;
+  }>;
+
+  return c.json({
+    data: {
+      sessionId: session.id,
+      qualId: session.qual_id,
+      status: session.status,
+      slides: slides.map((s) => ({
+        slideIndex: s.slide_index,
+        title: s.title,
+        bullets: JSON.parse(s.bullets),
+        speakerNotes: s.speaker_notes,
+        citations: s.citations ? JSON.parse(s.citations) : undefined,
+        imagePrompt: s.image_prompt,
+        imageFilename: s.image_filename,
+        imageUrl: s.image_filename
+          ? `/api/v1/study/slideshow/images/${s.image_filename}`
+          : undefined,
+        imageStatus: s.image_status,
+        imageError: s.image_error,
+      })),
+      imagesCompleted: session.images_completed,
+    },
+  });
+});
+
+// ── GET /study/slideshow/:sessionId/export — Export as PPTX or PDF ──────────
+
+app.get("/study/slideshow/:sessionId/export", async (c) => {
+  const sessionId = Number(c.req.param("sessionId"));
+  const format = (c.req.query("format") || "pptx") as "pptx" | "pdf";
+
+  if (!Number.isFinite(sessionId)) {
+    return c.json({ error: "Invalid session ID" }, 400);
+  }
+  if (format !== "pptx" && format !== "pdf") {
+    return c.json({ error: "Format must be pptx or pdf" }, 400);
+  }
+
+  const session = db
+    .prepare(`SELECT * FROM slideshow_sessions WHERE id = ?`)
+    .get(sessionId) as { id: number; qual_id: string } | undefined;
+
+  if (!session) return c.json({ error: "Session not found" }, 404);
+
+  const slides = db
+    .prepare(
+      `SELECT * FROM slideshow_slides WHERE session_id = ? ORDER BY slide_index`,
+    )
+    .all(sessionId) as Array<{
+    slide_index: number;
+    title: string;
+    bullets: string;
+    speaker_notes: string | null;
+    citations: string | null;
+    image_filename: string | null;
+    image_status: string;
+  }>;
+
+  if (!slides.length) {
+    return c.json({ error: "No slides found" }, 404);
+  }
+
+  // Load images into buffers
+  const imageBuffers: Map<number, Buffer> = new Map();
+  for (const s of slides) {
+    if (s.image_filename && s.image_status === "ready") {
+      const fp = path.join(IMAGES_DIR, s.image_filename);
+      if (fs.existsSync(fp)) {
+        imageBuffers.set(s.slide_index, fs.readFileSync(fp));
+      }
+    }
+  }
+
+  const qualDef = QUAL_MAP.get(session.qual_id);
+  const deckTitle = qualDef
+    ? `${qualDef.label} — Study Slideshow`
+    : "Study Slideshow";
+
+  if (format === "pptx") {
+    const PptxGenJS = (await import("pptxgenjs")).default;
+    const pres = new PptxGenJS();
+    pres.layout = "LAYOUT_WIDE"; // 16:9
+    pres.author = "MIAgent";
+    pres.title = deckTitle;
+
+    // Define dark theme colors
+    const BG_COLOR = "1a1a2e";
+    const TEXT_COLOR = "e0e0e0";
+    const ACCENT_COLOR = "4fc3f7";
+    const MUTED_COLOR = "888888";
+
+    for (const s of slides) {
+      const slide = pres.addSlide();
+      slide.background = { color: BG_COLOR };
+
+      const bullets = JSON.parse(s.bullets) as string[];
+      const hasImage = imageBuffers.has(s.slide_index);
+
+      // Title
+      slide.addText(s.title, {
+        x: 0.5,
+        y: 0.3,
+        w: hasImage ? 5.5 : 12,
+        h: 0.7,
+        fontSize: 24,
+        bold: true,
+        color: TEXT_COLOR,
+        fontFace: "Arial",
+      });
+
+      // Bullets
+      slide.addText(
+        bullets.map((b) => ({
+          text: b,
+          options: {
+            bullet: { code: "2022" },
+            fontSize: 14,
+            color: TEXT_COLOR,
+            fontFace: "Arial",
+            lineSpacingMultiple: 1.5,
+          },
+        })),
+        {
+          x: 0.5,
+          y: 1.2,
+          w: hasImage ? 5.5 : 12,
+          h: 4.5,
+          valign: "top",
+        },
+      );
+
+      // Image (right side)
+      if (hasImage) {
+        const imgBuf = imageBuffers.get(s.slide_index)!;
+        slide.addImage({
+          data: `image/png;base64,${imgBuf.toString("base64")}`,
+          x: 6.3,
+          y: 1.0,
+          w: 6.2,
+          h: 4.5,
+          rounding: true,
+        });
+      }
+
+      // Citations footer
+      const citations = s.citations ? JSON.parse(s.citations) as string[] : [];
+      if (citations.length > 0) {
+        slide.addText(citations.join(" | "), {
+          x: 0.5,
+          y: 6.8,
+          w: 12,
+          h: 0.4,
+          fontSize: 9,
+          color: ACCENT_COLOR,
+          fontFace: "Arial",
+        });
+      }
+
+      // Speaker notes
+      if (s.speaker_notes) {
+        slide.addNotes(s.speaker_notes);
+      }
+    }
+
+    const buffer = (await pres.write({ outputType: "nodebuffer" })) as Buffer;
+    c.header(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    );
+    c.header(
+      "Content-Disposition",
+      `attachment; filename="${session.qual_id}-slideshow.pptx"`,
+    );
+    return c.body(new Uint8Array(buffer));
+  }
+
+  // PDF export
+  const { PDFDocument, rgb, StandardFonts } = await import("pdf-lib");
+  const pdfDoc = await PDFDocument.create();
+  pdfDoc.setTitle(deckTitle);
+  pdfDoc.setAuthor("MIAgent");
+
+  // Landscape A4
+  const W = 841.89;
+  const H = 595.28;
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  for (const s of slides) {
+    const page = pdfDoc.addPage([W, H]);
+    const bullets = JSON.parse(s.bullets) as string[];
+    const hasImage = imageBuffers.has(s.slide_index);
+    const textWidth = hasImage ? W * 0.55 : W - 80;
+
+    // Background
+    page.drawRectangle({
+      x: 0, y: 0, width: W, height: H,
+      color: rgb(0.1, 0.1, 0.18),
+    });
+
+    // Title
+    page.drawText(s.title, {
+      x: 40,
+      y: H - 50,
+      size: 22,
+      font: fontBold,
+      color: rgb(0.88, 0.88, 0.88),
+      maxWidth: textWidth,
+    });
+
+    // Bullets
+    let bulletY = H - 90;
+    for (const b of bullets) {
+      if (bulletY < 80) break;
+      const lines = wrapText(b, font, 13, textWidth - 30);
+      for (const line of lines) {
+        if (bulletY < 80) break;
+        page.drawText(`\u2022  ${line}`, {
+          x: 50,
+          y: bulletY,
+          size: 13,
+          font,
+          color: rgb(0.88, 0.88, 0.88),
+        });
+        bulletY -= 20;
+      }
+      bulletY -= 5;
+    }
+
+    // Image
+    if (hasImage) {
+      try {
+        const imgBuf = imageBuffers.get(s.slide_index)!;
+        const pngImage = await pdfDoc.embedPng(imgBuf);
+        const imgX = W * 0.58;
+        const imgW = W * 0.38;
+        const imgH = H * 0.6;
+        const imgY = H - 60 - imgH;
+        const dims = pngImage.scaleToFit(imgW, imgH);
+        page.drawImage(pngImage, {
+          x: imgX + (imgW - dims.width) / 2,
+          y: imgY + (imgH - dims.height) / 2,
+          width: dims.width,
+          height: dims.height,
+        });
+      } catch {
+        // Skip image if embed fails
+      }
+    }
+
+    // Citations
+    const citations = s.citations ? JSON.parse(s.citations) as string[] : [];
+    if (citations.length > 0) {
+      page.drawText(citations.join(" | "), {
+        x: 40,
+        y: 25,
+        size: 8,
+        font,
+        color: rgb(0.31, 0.76, 0.97),
+        maxWidth: W - 80,
+      });
+    }
+  }
+
+  const pdfBytes = await pdfDoc.save();
+  c.header("Content-Type", "application/pdf");
+  c.header(
+    "Content-Disposition",
+    `attachment; filename="${session.qual_id}-slideshow.pdf"`,
+  );
+  return c.body(new Uint8Array(pdfBytes));
+});
+
+/** Simple word-wrap for pdf-lib (no built-in text wrapping). */
+function wrapText(
+  text: string,
+  font: { widthOfTextAtSize: (t: string, s: number) => number },
+  fontSize: number,
+  maxWidth: number,
+): string[] {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(test, fontSize) <= maxWidth) {
+      current = test;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
 
 export default app;

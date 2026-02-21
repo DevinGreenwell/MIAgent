@@ -36,4 +36,36 @@ db.exec(`
   )
 `);
 
+// Slideshow image generation session tracking
+db.exec(`
+  CREATE TABLE IF NOT EXISTS slideshow_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    study_content_id INTEGER,
+    qual_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    slide_count INTEGER NOT NULL DEFAULT 0,
+    images_completed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (study_content_id) REFERENCES study_content(id) ON DELETE SET NULL
+  )
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS slideshow_slides (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    slide_index INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    bullets TEXT NOT NULL,
+    speaker_notes TEXT,
+    citations TEXT,
+    image_prompt TEXT,
+    image_filename TEXT,
+    image_status TEXT NOT NULL DEFAULT 'pending',
+    image_error TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (session_id) REFERENCES slideshow_sessions(id) ON DELETE CASCADE
+  )
+`);
+
 export default db;
