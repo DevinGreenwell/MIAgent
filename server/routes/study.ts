@@ -26,100 +26,100 @@ const QUALS: QualDef[] = [
     id: "BI", label: "Barge Inspector", fullName: "Barge Inspector",
     vesselType: "uninspected-vessels",
     cfrParts: [30, 31, 32, 33, 34, 35, 151, 153],
-    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Barge Inspector — Inspection of tank barges, deck barges, and other non-self-propelled vessels. Key areas: hull integrity, cargo containment, venting systems, pollution prevention, towing gear.",
   },
   {
     id: "DI", label: "Dry Dock Inspector", fullName: "Dry Dock Inspector",
     cfrParts: [61, 71, 91, 107, 115, 176],
-    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "class-rules"],
+    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "class-rules", "msm"],
     studyContext: "Dry Dock Inspector — Drydock and internal structural examinations across all vessel types. Key areas: hull plating, shell readings, sea valves, rudder/propeller, cathodic protection.",
   },
   {
     id: "HI", label: "Hull Inspector", fullName: "Hull Inspector",
     cfrParts: [42, 44, 45, 46, 56, 58, 61, 71, 91, 115, 176],
-    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "class-rules"],
+    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "class-rules", "msm"],
     studyContext: "Hull Inspector — Hull structural inspections across all vessel types. Key areas: structural members, watertight integrity, stability, hull openings, load line compliance, structural fire protection.",
   },
   {
     id: "HT", label: "Hull Tank Inspector", fullName: "Hull Tank Inspector",
     vesselType: "tank-vessels",
     cfrParts: [30, 31, 32, 33, 34, 35, 39, 40, 151, 153],
-    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Hull Tank Inspector — Combined hull and cargo tank inspections for tank vessels and tank barges. Key areas: cargo tank integrity, coatings, venting, cargo piping, OPA 90, double hull requirements, inert gas.",
   },
   {
     id: "KI", label: "K Inspector", fullName: "Small Passenger Vessels ≥100 GT (Subchapter K)",
     subchapter: "K", vesselType: "small-passenger-vessels",
     cfrParts: [114, 115, 116, 117, 118, 119, 120, 121, 122],
-    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Subchapter K — Small Passenger Vessels of 100 GT and above. Key areas: structural fire protection, means of escape, stability, lifesaving equipment.",
   },
   {
     id: "MI", label: "Machinery Inspector", fullName: "Machinery Inspector",
     cfrParts: [50, 52, 54, 56, 58, 62, 63],
-    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Machinery Inspector — Main propulsion, auxiliary machinery, and related systems. Key areas: diesel/gas turbine engines, reduction gears, shafting, fuel oil, bilge/ballast, steering gear, electrical, automation.",
   },
   {
     id: "MODU", label: "MODU Inspector", fullName: "Mobile Offshore Drilling Unit Inspector",
     subchapter: "IA", vesselType: "mobile-offshore-drilling-units",
     cfrParts: [107, 108, 109],
-    collections: ["cfr", "nvic", "prg", "mtn", "class-rules"],
+    collections: ["cfr", "nvic", "prg", "mtn", "class-rules", "msm"],
     studyContext: "Subchapter IA — Mobile Offshore Drilling Units (MODUs). Key areas: structural integrity, stability, marine evacuation systems, firefighting, industrial systems, classification society oversight.",
   },
   {
     id: "MS", label: "Machinery Steam Inspector", fullName: "Machinery Steam Inspector",
     cfrParts: [50, 52, 54, 56, 58, 62, 63],
-    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Machinery Steam Inspector — Steam propulsion plants and high-pressure boiler systems. Key areas: boiler construction/testing (46 CFR 52–54), steam piping, pressure vessels, safety valves, superheaters, steam turbines.",
   },
   {
     id: "OSV", label: "OSV Inspector", fullName: "Offshore Supply Vessel Inspector",
     subchapter: "L", vesselType: "offshore-supply-vessels",
     cfrParts: [125, 126, 127, 128, 129, 130, 131, 132, 133, 134],
-    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Subchapter L — Offshore Supply Vessels (OSVs). Key areas: deck cargo, stability with cargo, fire protection, lifesaving, machinery, dynamic positioning.",
   },
   {
     id: "TI", label: "T Inspector", fullName: "Small Passenger Vessels (Subchapter T)",
     subchapter: "T", vesselType: "small-passenger-vessels",
     cfrParts: [175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185],
-    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Subchapter T — Small Passenger Vessels under 100 GT. Key areas: hull structure, stability, fire protection, lifesaving, machinery, electrical systems.",
   },
   // Foreign (alphabetical by id)
   {
     id: "FCVE", label: "Foreign Chemical Vessel Examiner", fullName: "Foreign Chemical Vessel Examiner",
-    collections: ["cfr", "nvic", "imo", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "imo", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Foreign Chemical Vessel Examiner — Foreign-flag chemical tankers, SOLAS, MARPOL Annex II, IBC Code. Key areas: cargo containment, tank coatings, venting, gas detection, pollution prevention.",
   },
   {
     id: "FFVE", label: "Foreign Freight Vessel Examiner", fullName: "Foreign Freight Vessel Examiner",
     vesselType: "cargo-miscellaneous-vessels",
-    collections: ["cfr", "nvic", "imo", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "imo", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Foreign Freight Vessel Examiner — Foreign-flag freight/cargo vessels, SOLAS, MARPOL, Load Line conventions. Key areas: structural safety, fire protection, lifesaving, cargo securing, ISM/ISPS, STCW.",
   },
   {
     id: "FFTE", label: "Foreign Tank Vessel Examiner", fullName: "Foreign Tank Vessel Examiner",
     vesselType: "tank-vessels",
-    collections: ["cfr", "nvic", "imo", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "imo", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Foreign Tank Vessel Examiner — Foreign-flag oil tankers, SOLAS, MARPOL Annex I. Key areas: cargo tank integrity, inert gas, crude oil washing, oil discharge monitoring, double hull, ISM/ISPS.",
   },
   {
     id: "FGVE", label: "Foreign Gas Vessel Examiner", fullName: "Foreign Gas Vessel Examiner",
-    collections: ["cfr", "nvic", "imo", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "imo", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Foreign Gas Vessel Examiner — Foreign-flag gas carriers (LNG/LPG), SOLAS, MARPOL, IGC Code. Key areas: cargo containment, pressure relief, gas detection, emergency shutdown, re-liquefaction.",
   },
   {
     id: "FPVE", label: "Foreign Passenger Vessel Examiner", fullName: "Foreign Passenger Vessel Examiner",
     vesselType: "passenger-vessels",
-    collections: ["cfr", "nvic", "imo", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "imo", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Foreign Passenger Vessel Examiner — Foreign-flag passenger vessels/cruise ships, SOLAS, MARPOL, MLC. Key areas: structural fire protection, means of escape, lifesaving, stability, ISM/ISPS, Safe Return to Port.",
   },
   {
     id: "PSCE", label: "Port State Control Examiner", fullName: "Port State Control Examiner",
-    collections: ["cfr", "nvic", "imo", "prg", "mtn", "policy-letter"],
+    collections: ["cfr", "nvic", "imo", "prg", "mtn", "policy-letter", "msm"],
     studyContext: "Port State Control Examiner — General examination of foreign-flag vessels, SOLAS, MARPOL, STCW, MLC. Key areas: ISM/ISPS compliance, structural safety, fire protection, lifesaving, pollution prevention, detention criteria.",
   },
 ];
@@ -216,7 +216,7 @@ app.get("/study/references", (c) => {
     }
   }
 
-  query += " ORDER BY d.collection_id, d.document_id LIMIT 100";
+  query += " ORDER BY d.collection_id, d.document_id LIMIT 250";
 
   const rows = db.prepare(query).all(...params) as Array<{
     id: number; document_id: string; title: string; collection_id: string; year: number | null; summary: string | null;
