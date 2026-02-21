@@ -240,7 +240,7 @@ function SlideshowRenderer({
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            Generating images... {imageProgress.completed}/{imageProgress.total}
+            Generating slide images... {imageProgress.completed}/{imageProgress.total}
           </div>
           <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
             <div
@@ -255,12 +255,48 @@ function SlideshowRenderer({
         </div>
       )}
 
-      {/* Slide content */}
-      <div className="rounded-xl border border-border bg-card p-6">
-        <h3 className="mb-4 text-lg font-semibold text-foreground">{slide.title}</h3>
-        <div className={hasImage ? "flex gap-6" : ""}>
-          {/* Bullets */}
-          <div className={hasImage ? "flex-1 min-w-0" : ""}>
+      {/* Slide content — full-width stacked layout */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        {/* Full-width slide image or placeholder */}
+        {hasImage ? (
+          <div className="group relative">
+            <img
+              src={imgSlide!.imageUrl!}
+              alt={slide.title}
+              className="w-full aspect-video object-contain bg-[#1a1a2e]"
+            />
+            <button
+              onClick={() => onRegenerateImage(index)}
+              className="absolute bottom-3 right-3 rounded-md bg-black/60 px-2.5 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+            >
+              Regenerate Slide
+            </button>
+          </div>
+        ) : imgSlide?.imageStatus === "generating" ? (
+          <div className="flex aspect-video items-center justify-center bg-muted/20">
+            <svg className="h-8 w-8 animate-spin text-muted-foreground" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          </div>
+        ) : imgSlide?.imageStatus === "failed" ? (
+          <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-red-900/10">
+            <span className="text-sm text-red-400">Slide image failed</span>
+            <button
+              onClick={() => onRegenerateImage(index)}
+              className="rounded-md bg-muted px-3 py-1.5 text-xs text-foreground hover:bg-accent"
+            >
+              Retry
+            </button>
+          </div>
+        ) : imgSlide?.imageStatus === "pending" && isGeneratingImages ? (
+          <div className="flex aspect-video items-center justify-center bg-muted/10">
+            <span className="text-sm text-muted-foreground">Queued...</span>
+          </div>
+        ) : !imageSlides ? (
+          /* Text-only mode: show title + bullets directly */
+          <div className="p-6">
+            <h3 className="mb-4 text-lg font-semibold text-foreground">{slide.title}</h3>
             <ul className="space-y-2">
               {slide.bullets.map((b, bi) => (
                 <li key={bi} className="flex items-start gap-2 text-sm text-foreground">
@@ -270,68 +306,45 @@ function SlideshowRenderer({
               ))}
             </ul>
           </div>
+        ) : null}
 
-          {/* Image */}
-          {imgSlide && (
-            <div className="flex-1 min-w-0">
-              {imgSlide.imageStatus === "ready" && imgSlide.imageUrl && (
-                <div className="group relative">
-                  <img
-                    src={imgSlide.imageUrl}
-                    alt={slide.title}
-                    className="w-full rounded-lg border border-border object-cover"
-                  />
-                  <button
-                    onClick={() => onRegenerateImage(index)}
-                    className="absolute bottom-2 right-2 rounded-md bg-black/60 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
-                  >
-                    Regenerate
-                  </button>
-                </div>
-              )}
-              {imgSlide.imageStatus === "generating" && (
-                <div className="flex h-40 items-center justify-center rounded-lg border border-border bg-muted/30">
-                  <svg className="h-6 w-6 animate-spin text-muted-foreground" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                </div>
-              )}
-              {imgSlide.imageStatus === "failed" && (
-                <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-lg border border-red-800/50 bg-red-900/10">
-                  <span className="text-xs text-red-400">Image failed</span>
-                  <button
-                    onClick={() => onRegenerateImage(index)}
-                    className="rounded-md bg-muted px-2 py-1 text-xs text-foreground hover:bg-accent"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-              {imgSlide.imageStatus === "pending" && isGeneratingImages && (
-                <div className="flex h-40 items-center justify-center rounded-lg border border-border bg-muted/20">
-                  <span className="text-xs text-muted-foreground">Queued...</span>
-                </div>
-              )}
+        {/* Collapsible slide text content (shown when images are present) */}
+        {imageSlides && (
+          <div className="border-t border-border">
+            <details className="group">
+              <summary className="cursor-pointer px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors select-none">
+                <span className="ml-1">Slide text content</span>
+              </summary>
+              <div className="px-6 pb-4">
+                <h4 className="mb-2 text-sm font-semibold text-foreground">{slide.title}</h4>
+                <ul className="space-y-1.5">
+                  {slide.bullets.map((b, bi) => (
+                    <li key={bi} className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-muted-foreground/50" />
+                      {b}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </details>
+          </div>
+        )}
+
+        {/* Speaker notes + citations — always visible */}
+        <div className="border-t border-border px-4 py-3 space-y-2">
+          {slide.speakerNotes && (
+            <div className="text-xs leading-relaxed text-muted-foreground">
+              <span className="font-semibold">Notes:</span> {slide.speakerNotes}
+            </div>
+          )}
+          {slide.citations && slide.citations.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {slide.citations.map((ci, cii) => (
+                <span key={cii} className="text-xs text-primary">{ci}</span>
+              ))}
             </div>
           )}
         </div>
-
-        {/* Speaker notes */}
-        {slide.speakerNotes && (
-          <div className="mt-4 rounded-md bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
-            <span className="font-semibold">Notes:</span> {slide.speakerNotes}
-          </div>
-        )}
-
-        {/* Citations */}
-        {slide.citations && slide.citations.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {slide.citations.map((ci, cii) => (
-              <span key={cii} className="text-xs text-primary">{ci}</span>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Bottom toolbar: nav + actions */}
@@ -358,7 +371,7 @@ function SlideshowRenderer({
               onClick={onGenerateImages}
               className="rounded-md bg-primary/10 px-3 py-1.5 text-sm text-primary hover:bg-primary/20 transition-colors"
             >
-              Generate Images
+              Generate Slide Images
             </button>
           )}
           {sessionId && imagesComplete && (

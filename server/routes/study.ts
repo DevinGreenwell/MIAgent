@@ -406,47 +406,62 @@ app.delete("/study/history/:id", (c) => {
 
 // ── Slideshow image generation helpers ──────────────────────────────────────
 
-const IMAGE_PROMPT_SYSTEM = `You are an image prompt engineer. Given a presentation slide's content about USCG maritime inspection topics, create a single Flux image generation prompt.
+const IMAGE_PROMPT_SYSTEM = `You are a presentation slide designer. Given a slide's title and key points about USCG maritime inspection topics, create an image generation prompt for a COMPLETE VISUAL PRESENTATION SLIDE — the entire slide rendered as one image.
 
-Requirements:
-- Photorealistic maritime or industrial imagery relevant to the slide topic
-- Professional lighting, high quality, detailed
-- NO text, labels, watermarks, or overlays in the image
-- NO detailed human faces (show equipment, vessels, machinery, environments instead)
-- Under 200 words
-- Focus on the visual subject matter (ships, equipment, ports, machinery, safety systems)
+Requirements for the slide image:
+- Dark navy/charcoal background (#1a1a2e or similar deep dark tone)
+- Title in LARGE bold white text prominently at the top of the slide
+- 3-5 short bullet points in clean white text below the title, clearly readable
+- Subtle maritime accent imagery as a watermark or background element (anchor, compass rose, ship silhouette, waves) — translucent, not competing with text
+- Professional corporate presentation aesthetic, widescreen 16:9 layout
+- Clean modern typography, generous spacing between bullets
+- The text content MUST be included EXACTLY as provided — this is critical
+- NO detailed human faces
+- Under 300 words
 
 Return ONLY the image prompt text, nothing else.`;
+
+/** Truncate bullets for legibility in generated slide images. */
+function truncateBullets(bullets: string[], maxBullets = 5, maxWords = 8): string[] {
+  return bullets.slice(0, maxBullets).map((b) => {
+    const words = b.split(/\s+/);
+    return words.length > maxWords ? words.slice(0, maxWords).join(" ") + "..." : b;
+  });
+}
 
 async function generateImagePrompt(
   slideTitle: string,
   bullets: string[],
 ): Promise<string> {
+  const shortBullets = truncateBullets(bullets);
   if (!anthropic) {
-    return fallbackImagePrompt(slideTitle);
+    return fallbackImagePrompt(slideTitle, shortBullets);
   }
   try {
     const response = await anthropic.messages.create({
       model: AI_MODEL,
-      max_tokens: 300,
+      max_tokens: 400,
       system: IMAGE_PROMPT_SYSTEM,
       messages: [
         {
           role: "user",
-          content: `Slide title: ${slideTitle}\nKey points:\n${bullets.map((b) => `- ${b}`).join("\n")}`,
+          content: `Create a complete slide image prompt for:\nTitle: ${slideTitle}\nKey Points:\n${shortBullets.map((b) => `- ${b}`).join("\n")}`,
         },
       ],
     });
     const text =
       response.content[0]?.type === "text" ? response.content[0].text : "";
-    return text.trim() || fallbackImagePrompt(slideTitle);
+    return text.trim() || fallbackImagePrompt(slideTitle, shortBullets);
   } catch {
-    return fallbackImagePrompt(slideTitle);
+    return fallbackImagePrompt(slideTitle, shortBullets);
   }
 }
 
-function fallbackImagePrompt(title: string): string {
-  return `Professional photorealistic image of ${title.toLowerCase()}, maritime industry, USCG inspection context, high quality, detailed, professional lighting, no text or labels`;
+function fallbackImagePrompt(title: string, bullets?: string[]): string {
+  const bulletText = bullets?.length
+    ? ` Bullet points in white text: ${bullets.map((b) => `"${b}"`).join(", ")}.`
+    : "";
+  return `A professional presentation slide with dark navy background (#1a1a2e). Large bold white title text at the top reading "${title}".${bulletText} Subtle translucent maritime watermark (anchor or compass rose) in the background. Clean modern corporate aesthetic, widescreen 16:9 layout, no human faces`;
 }
 
 async function generateAndSaveImage(
@@ -891,72 +906,69 @@ app.get("/study/slideshow/:sessionId/export", async (c) => {
 
     for (const s of slides) {
       const slide = pres.addSlide();
-      slide.background = { color: BG_COLOR };
-
       const bullets = JSON.parse(s.bullets) as string[];
       const hasImage = imageBuffers.has(s.slide_index);
 
-      // Title
-      slide.addText(s.title, {
-        x: 0.5,
-        y: 0.3,
-        w: hasImage ? 5.5 : 12,
-        h: 0.7,
-        fontSize: 24,
-        bold: true,
-        color: TEXT_COLOR,
-        fontFace: "Arial",
-      });
-
-      // Bullets
-      slide.addText(
-        bullets.map((b) => ({
-          text: b,
-          options: {
-            bullet: { code: "2022" },
-            fontSize: 14,
-            color: TEXT_COLOR,
-            fontFace: "Arial",
-            lineSpacingMultiple: 1.5,
-          },
-        })),
-        {
-          x: 0.5,
-          y: 1.2,
-          w: hasImage ? 5.5 : 12,
-          h: 4.5,
-          valign: "top",
-        },
-      );
-
-      // Image (right side)
       if (hasImage) {
+        // Full-page slide image (text is baked into the image)
         const imgBuf = imageBuffers.get(s.slide_index)!;
         slide.addImage({
           data: `image/png;base64,${imgBuf.toString("base64")}`,
-          x: 6.3,
-          y: 1.0,
-          w: 6.2,
-          h: 4.5,
-          rounding: true,
+          x: 0,
+          y: 0,
+          w: "100%",
+          h: "100%",
         });
-      }
+      } else {
+        // Text-only fallback
+        slide.background = { color: BG_COLOR };
 
-      // Citations footer
-      const citations = s.citations ? JSON.parse(s.citations) as string[] : [];
-      if (citations.length > 0) {
-        slide.addText(citations.join(" | "), {
+        slide.addText(s.title, {
           x: 0.5,
-          y: 6.8,
+          y: 0.3,
           w: 12,
-          h: 0.4,
-          fontSize: 9,
-          color: ACCENT_COLOR,
+          h: 0.7,
+          fontSize: 24,
+          bold: true,
+          color: TEXT_COLOR,
           fontFace: "Arial",
         });
+
+        slide.addText(
+          bullets.map((b) => ({
+            text: b,
+            options: {
+              bullet: { code: "2022" },
+              fontSize: 14,
+              color: TEXT_COLOR,
+              fontFace: "Arial",
+              lineSpacingMultiple: 1.5,
+            },
+          })),
+          {
+            x: 0.5,
+            y: 1.2,
+            w: 12,
+            h: 4.5,
+            valign: "top",
+          },
+        );
+
+        const citations = s.citations ? JSON.parse(s.citations) as string[] : [];
+        if (citations.length > 0) {
+          slide.addText(citations.join(" | "), {
+            x: 0.5,
+            y: 6.8,
+            w: 12,
+            h: 0.4,
+            fontSize: 9,
+            color: ACCENT_COLOR,
+            fontFace: "Arial",
+          });
+        }
       }
 
-      // Speaker notes
+      // Speaker notes always added
       if (s.speaker_notes) {
         slide.addNotes(s.speaker_notes);
       }
@@ -986,11 +998,12 @@ app.get("/study/slideshow/:sessionId/export", async (c) => {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  for (const s of slides) {
-    const page = pdfDoc.addPage([W, H]);
+  /** Render a text-only slide on the given PDF page. */
+  function renderTextSlide(
+    page: Awaited<ReturnType<typeof PDFDocument.create>> extends { addPage: (...a: any[]) => infer P } ? P : any,
+    s: typeof slides[number],
+  ) {
     const bullets = JSON.parse(s.bullets) as string[];
-    const hasImage = imageBuffers.has(s.slide_index);
-    const textWidth = hasImage ? W * 0.55 : W - 80;
 
     // Background
     page.drawRectangle({
@@ -1005,14 +1018,14 @@ app.get("/study/slideshow/:sessionId/export", async (c) => {
       size: 22,
       font: fontBold,
       color: rgb(0.88, 0.88, 0.88),
-      maxWidth: textWidth,
+      maxWidth: W - 80,
     });
 
     // Bullets
     let bulletY = H - 90;
     for (const b of bullets) {
       if (bulletY < 80) break;
-      const lines = wrapText(b, font, 13, textWidth - 30);
+      const lines = wrapText(b, font, 13, W - 110);
       for (const line of lines) {
         if (bulletY < 80) break;
         page.drawText(`\u2022  ${line}`, {
@@ -1027,27 +1040,6 @@ app.get("/study/slideshow/:sessionId/export", async (c) => {
       bulletY -= 5;
     }
 
-    // Image
-    if (hasImage) {
-      try {
-        const imgBuf = imageBuffers.get(s.slide_index)!;
-        const pngImage = await pdfDoc.embedPng(imgBuf);
-        const imgX = W * 0.58;
-        const imgW = W * 0.38;
-        const imgH = H * 0.6;
-        const imgY = H - 60 - imgH;
-        const dims = pngImage.scaleToFit(imgW, imgH);
-        page.drawImage(pngImage, {
-          x: imgX + (imgW - dims.width) / 2,
-          y: imgY + (imgH - dims.height) / 2,
-          width: dims.width,
-          height: dims.height,
-        });
-      } catch {
-        // Skip image if embed fails
-      }
-    }
-
     // Citations
     const citations = s.citations ? JSON.parse(s.citations) as string[] : [];
     if (citations.length > 0) {
@@ -1059,6 +1051,30 @@ app.get("/study/slideshow/:sessionId/export", async (c) => {
         color: rgb(0.31, 0.76, 0.97),
         maxWidth: W - 80,
       });
+    }
+  }
+
+  for (const s of slides) {
+    const page = pdfDoc.addPage([W, H]);
+    const hasImage = imageBuffers.has(s.slide_index);
+
+    if (hasImage) {
+      try {
+        const imgBuf = imageBuffers.get(s.slide_index)!;
+        const pngImage = await pdfDoc.embedPng(imgBuf);
+        const dims = pngImage.scaleToFit(W, H);
+        page.drawImage(pngImage, {
+          x: (W - dims.width) / 2,
+          y: (H - dims.height) / 2,
+          width: dims.width,
+          height: dims.height,
+        });
+      } catch {
+        // Image embed failed — fall back to text slide
+        renderTextSlide(page, s);
+      }
+    } else {
+      renderTextSlide(page, s);
     }
   }
 
