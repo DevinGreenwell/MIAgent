@@ -2,7 +2,8 @@ import { useStore } from "../../store";
 import { useSystems } from "../../api/components";
 
 export default function ViewerControls() {
-  const { selectedSystem, setSelectedSystem } = useStore();
+  const selectedSystem = useStore((s) => s.selectedSystem);
+  const setSelectedSystem = useStore((s) => s.setSelectedSystem);
   const { data: systems } = useSystems();
 
   return (

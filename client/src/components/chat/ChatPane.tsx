@@ -13,7 +13,9 @@ interface Props {
 }
 
 export default function ChatPane({ initialMessages, onSessionCreated }: Props) {
-  const { chatSessionId, setChatSessionId, selectedComponent } = useStore();
+  const chatSessionId = useStore((s) => s.chatSessionId);
+  const setChatSessionId = useStore((s) => s.setChatSessionId);
+  const selectedComponent = useStore((s) => s.selectedComponent);
   const [messages, setMessages] = useState<ChatMessageType[]>(initialMessages || []);
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");

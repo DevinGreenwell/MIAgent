@@ -27,7 +27,7 @@ const BORDER_COLORS: Record<string, string> = {
 };
 
 export default function CollectionCards() {
-  const { setFilter } = useStore();
+  const setFilter = useStore((s) => s.setFilter);
   const { data: collections, isLoading } = useCollections();
 
   if (isLoading) {

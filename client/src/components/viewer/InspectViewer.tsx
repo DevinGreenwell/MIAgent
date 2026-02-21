@@ -130,7 +130,8 @@ function InspectScene({ meshName }: { meshName: string }) {
 }
 
 export default function InspectViewer() {
-  const { selectedComponent, selectedSubComponent } = useStore();
+  const selectedComponent = useStore((s) => s.selectedComponent);
+  const selectedSubComponent = useStore((s) => s.selectedSubComponent);
 
   return (
     <div className="relative h-full">

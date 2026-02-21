@@ -38,16 +38,18 @@ async function getTable(): Promise<lancedb.Table | null> {
 /** Vector similarity search against embedded chunks. */
 export async function searchChunks(
   queryVector: number[],
-  limit = 10
+  limit = 10,
+  filter?: string,
 ): Promise<ChunkResult[]> {
   const tbl = await getTable();
   if (!tbl) return [];
 
   try {
-    const results = await tbl
-      .vectorSearch(queryVector)
-      .limit(limit)
-      .toArray();
+    let query = tbl.vectorSearch(queryVector);
+    if (filter) {
+      query = query.where(filter);
+    }
+    const results = await query.limit(limit).toArray();
 
     return results.map((r) => ({
       text: r.text as string,

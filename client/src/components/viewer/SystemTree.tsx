@@ -5,7 +5,10 @@ import { LAYOUT, displayName } from "./componentRegistry";
 
 /** Expandable system node with its child components. */
 function SystemNode({ system }: { system: { id: number; name: string; color: string; component_count: number } }) {
-  const { selectedComponent, setSelectedComponent, selectedSystem, setSelectedSystem } = useStore();
+  const selectedComponent = useStore((s) => s.selectedComponent);
+  const setSelectedComponent = useStore((s) => s.setSelectedComponent);
+  const selectedSystem = useStore((s) => s.selectedSystem);
+  const setSelectedSystem = useStore((s) => s.setSelectedSystem);
   const { data: components } = useComponents(system.id);
   const [expanded, setExpanded] = useState(false);
 

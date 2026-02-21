@@ -59,13 +59,17 @@ export async function gatherRagContext(
   try {
     const queryVector = await embedText(query);
     if (queryVector) {
-      vectorChunks = await searchChunks(queryVector, vectorLimit);
-      if (collections) {
-        vectorChunks = vectorChunks.filter((c) => collections.includes(c.collection_id));
+      // Push filters into LanceDB query instead of post-filtering
+      const whereFilters: string[] = [];
+      if (collections?.length) {
+        whereFilters.push(`collection_id IN (${collections.map((c) => `'${c.replace(/'/g, "''")}'`).join(",")})`);
       }
-      if (documentIdFilter) {
-        vectorChunks = vectorChunks.filter((c) => documentIdFilter.has(c.document_ref));
+      if (documentIdFilter?.size) {
+        const docIds = [...documentIdFilter].map((d) => `'${d.replace(/'/g, "''")}'`).join(",");
+        whereFilters.push(`document_ref IN (${docIds})`);
       }
+      const filter = whereFilters.length ? whereFilters.join(" AND ") : undefined;
+      vectorChunks = await searchChunks(queryVector, vectorLimit, filter);
     }
   } catch (err) {
     console.warn("Vector search failed, falling through to FTS:", err);
@@ -107,7 +111,7 @@ export async function gatherRagContext(
       if (collections) {
         const collPlaceholders = collections.map(() => "?").join(",");
         ftsQuery = `
-          SELECT d.id, d.document_id, d.title, d.collection_id, dt.content
+          SELECT d.id, d.document_id, d.title, d.collection_id, SUBSTR(dt.content, 1, 500) as content
           FROM documents d
           LEFT JOIN document_text dt ON dt.document_id = d.id
           JOIN documents_fts fts ON fts.rowid = d.id
@@ -119,7 +123,7 @@ export async function gatherRagContext(
         ftsParams.push(...collections, ftsLimit);
       } else {
         ftsQuery = `
-          SELECT d.id, d.document_id, d.title, d.collection_id, dt.content
+          SELECT d.id, d.document_id, d.title, d.collection_id, SUBSTR(dt.content, 1, 500) as content
           FROM documents d
           LEFT JOIN document_text dt ON dt.document_id = d.id
           JOIN documents_fts fts ON fts.rowid = d.id

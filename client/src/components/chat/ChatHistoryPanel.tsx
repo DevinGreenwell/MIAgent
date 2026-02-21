@@ -8,7 +8,8 @@ interface Props {
 }
 
 export default function ChatHistoryPanel({ onSessionSelect }: Props) {
-  const { chatSessionId, setChatSessionId } = useStore();
+  const chatSessionId = useStore((s) => s.chatSessionId);
+  const setChatSessionId = useStore((s) => s.setChatSessionId);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 

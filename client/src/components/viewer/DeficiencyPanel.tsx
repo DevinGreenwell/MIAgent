@@ -82,7 +82,8 @@ function DeficiencyCard({
 
 /** Shows deficiencies for a selected component. */
 function ComponentDeficiencyView() {
-  const { selectedComponent, setSelectedComponent } = useStore();
+  const selectedComponent = useStore((s) => s.selectedComponent);
+  const setSelectedComponent = useStore((s) => s.setSelectedComponent);
   const { data, isLoading } = useComponent(selectedComponent);
 
   if (!selectedComponent) return null;
@@ -157,7 +158,8 @@ function ComponentDeficiencyView() {
 
 /** Shows ALL deficiencies organized by system when no component is selected. */
 function AllDeficienciesView() {
-  const { selectedSystem, setSelectedComponent } = useStore();
+  const selectedSystem = useStore((s) => s.selectedSystem);
+  const setSelectedComponent = useStore((s) => s.setSelectedComponent);
   const { data: systemsData } = useSystems();
   const { data, isLoading } = useQuery({
     queryKey: ["allDeficiencies", selectedSystem],
@@ -249,7 +251,7 @@ function AllDeficienciesView() {
 }
 
 export default function DeficiencyPanel() {
-  const { selectedComponent } = useStore();
+  const selectedComponent = useStore((s) => s.selectedComponent);
 
   return (
     <div className="h-full overflow-auto bg-card p-4">

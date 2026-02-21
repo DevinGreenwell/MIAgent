@@ -11,7 +11,7 @@ const InspectViewer = lazy(() => import("./InspectViewer"));
 type InspectPane = "viewer" | "systems" | "deficiencies";
 
 export default function EngineRoomView() {
-  const { selectedComponent } = useStore();
+  const selectedComponent = useStore((s) => s.selectedComponent);
   const [mobilePane, setMobilePane] = useState<InspectPane>("viewer");
 
   return (

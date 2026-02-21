@@ -3,7 +3,8 @@ import { useStore } from "../../store";
 import { COLLECTION_COLORS, formatDocId, formatTitle } from "../../lib/documents";
 
 export default function SourceCitation({ source }: { source: ChatSource }) {
-  const { setSelectedDocumentId, setActiveView } = useStore();
+  const setSelectedDocumentId = useStore((s) => s.setSelectedDocumentId);
+  const setActiveView = useStore((s) => s.setActiveView);
 
   const docLabel = formatDocId(source.document_id);
 

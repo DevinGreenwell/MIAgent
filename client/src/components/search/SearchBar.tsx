@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useStore } from "../../store";
 
 export default function SearchBar() {
-  const { searchQuery, setSearchQuery } = useStore();
+  const searchQuery = useStore((s) => s.searchQuery);
+  const setSearchQuery = useStore((s) => s.setSearchQuery);
   const [input, setInput] = useState(searchQuery);
 
   useEffect(() => {

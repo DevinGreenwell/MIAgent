@@ -4,7 +4,9 @@ import { getPdfUrl } from "../../api/client";
 import { COLLECTION_COLORS, formatDocId, formatTitle, titleCase } from "../../lib/documents";
 
 export default function DocumentDetail() {
-  const { selectedDocumentId, setSelectedDocumentId, setPdfOpen } = useStore();
+  const selectedDocumentId = useStore((s) => s.selectedDocumentId);
+  const setSelectedDocumentId = useStore((s) => s.setSelectedDocumentId);
+  const setPdfOpen = useStore((s) => s.setPdfOpen);
   const { data, isLoading } = useDocument(selectedDocumentId);
 
   if (!selectedDocumentId) return null;

@@ -2,7 +2,10 @@ import { useStore } from "../../store";
 import { useDocuments, useSearch } from "../../api/hooks";
 
 export default function Pagination() {
-  const { searchQuery, filters, page, setPage } = useStore();
+  const searchQuery = useStore((s) => s.searchQuery);
+  const filters = useStore((s) => s.filters);
+  const page = useStore((s) => s.page);
+  const setPage = useStore((s) => s.setPage);
 
   const params = { ...filters, page, limit: 25 };
   const { data } = searchQuery

@@ -9,7 +9,7 @@ import MobilePaneTabs from "../ui/MobilePaneTabs";
 type ChatMobilePane = "history" | "chat";
 
 export default function ChatView() {
-  const { chatSessionId } = useStore();
+  const chatSessionId = useStore((s) => s.chatSessionId);
   const [initialMessages, setInitialMessages] = useState<ChatMessage[]>([]);
   const [sessionKey, setSessionKey] = useState(0);
   const [mobilePane, setMobilePane] = useState<ChatMobilePane>("chat");

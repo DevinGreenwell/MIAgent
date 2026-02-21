@@ -17,7 +17,7 @@ const COMPONENT_SUGGESTIONS: Record<string, string[]> = {
 };
 
 export default function ChatSuggestions({ onSelect }: { onSelect: (text: string) => void }) {
-  const { selectedComponent } = useStore();
+  const selectedComponent = useStore((s) => s.selectedComponent);
 
   const suggestions = selectedComponent
     ? COMPONENT_SUGGESTIONS[selectedComponent] || COMPONENT_SUGGESTIONS.default

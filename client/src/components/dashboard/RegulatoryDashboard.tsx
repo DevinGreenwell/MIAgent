@@ -5,7 +5,8 @@ import CfrReferenceCard from "./CfrReferenceCard";
 import DeficiencyList from "./DeficiencyList";
 
 export default function RegulatoryDashboard() {
-  const { selectedComponent, setSelectedComponent } = useStore();
+  const selectedComponent = useStore((s) => s.selectedComponent);
+  const setSelectedComponent = useStore((s) => s.setSelectedComponent);
   const { data, isLoading } = useComponent(selectedComponent);
 
   if (!selectedComponent) return null;

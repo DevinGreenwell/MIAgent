@@ -18,7 +18,10 @@ const StudyView = lazy(() => import("./components/study/StudyView"));
 type SearchPane = "filters" | "documents" | "detail";
 
 function SearchView() {
-  const { selectedDocumentId, pdfOpen, searchQuery, filters } = useStore();
+  const selectedDocumentId = useStore((s) => s.selectedDocumentId);
+  const pdfOpen = useStore((s) => s.pdfOpen);
+  const searchQuery = useStore((s) => s.searchQuery);
+  const filters = useStore((s) => s.filters);
   const showCards = !searchQuery && !filters.collection;
   const [mobilePane, setMobilePane] = useState<SearchPane>("documents");
 
@@ -77,7 +80,7 @@ function SearchView() {
 }
 
 function ViewContent() {
-  const { activeView } = useStore();
+  const activeView = useStore((s) => s.activeView);
 
   return (
     <Suspense

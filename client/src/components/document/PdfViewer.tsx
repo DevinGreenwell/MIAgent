@@ -8,7 +8,8 @@ import { getPdfUrl } from "../../api/client";
 pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
 
 export default function PdfViewer() {
-  const { selectedDocumentId, setPdfOpen } = useStore();
+  const selectedDocumentId = useStore((s) => s.selectedDocumentId);
+  const setPdfOpen = useStore((s) => s.setPdfOpen);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.0);

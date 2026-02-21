@@ -12,7 +12,8 @@ export default function CfrReferenceCard({
 }: {
   document: ComponentDocument;
 }) {
-  const { setSelectedDocumentId, setActiveView } = useStore();
+  const setSelectedDocumentId = useStore((s) => s.setSelectedDocumentId);
+  const setActiveView = useStore((s) => s.setActiveView);
 
   return (
     <div

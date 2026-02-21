@@ -2,7 +2,10 @@ import { useStore } from "../../store";
 import { useComponent } from "../../api/components";
 
 export default function ComponentDocs() {
-  const { selectedComponent, setSelectedComponent, setSelectedDocumentId, setActiveView } = useStore();
+  const selectedComponent = useStore((s) => s.selectedComponent);
+  const setSelectedComponent = useStore((s) => s.setSelectedComponent);
+  const setSelectedDocumentId = useStore((s) => s.setSelectedDocumentId);
+  const setActiveView = useStore((s) => s.setActiveView);
   const { data, isLoading } = useComponent(selectedComponent);
 
   if (!selectedComponent) return null;

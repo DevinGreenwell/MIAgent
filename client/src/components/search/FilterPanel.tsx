@@ -25,7 +25,9 @@ function FilterSelect({ label, value, onChange, options }: {
 }
 
 export default function FilterPanel() {
-  const { filters, setFilter, clearFilters } = useStore();
+  const filters = useStore((s) => s.filters);
+  const setFilter = useStore((s) => s.setFilter);
+  const clearFilters = useStore((s) => s.clearFilters);
   const { data: collections } = useCollections();
   const { data: topics } = useTopics();
   const { data: vessels } = useVesselTypes();

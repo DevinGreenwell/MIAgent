@@ -15,12 +15,10 @@ function ComponentMesh({
   name: string;
   entry: LayoutEntry;
 }) {
-  const {
-    selectedComponent,
-    setSelectedComponent,
-    highlightedComponents,
-    selectedSystem,
-  } = useStore();
+  const selectedComponent = useStore((s) => s.selectedComponent);
+  const setSelectedComponent = useStore((s) => s.setSelectedComponent);
+  const highlightedComponents = useStore((s) => s.highlightedComponents);
+  const selectedSystem = useStore((s) => s.selectedSystem);
   const { data: systems } = useSystems();
   const [hovered, setHovered] = useState(false);
 

@@ -105,7 +105,8 @@ function PartTreeContent({ model, targetSize, targetHeight }: {
   targetSize: [number, number, number];
   targetHeight?: number;
 }) {
-  const { selectedSubComponent, setSelectedSubComponent } = useStore();
+  const selectedSubComponent = useStore((s) => s.selectedSubComponent);
+  const setSelectedSubComponent = useStore((s) => s.setSelectedSubComponent);
   const { parts } = useGltfParts(model, targetSize, targetHeight);
 
   const tree = useMemo(() => {
@@ -169,7 +170,7 @@ function PartTreeContent({ model, targetSize, targetHeight }: {
 }
 
 export default function ModelPartTree() {
-  const { selectedComponent } = useStore();
+  const selectedComponent = useStore((s) => s.selectedComponent);
 
   if (!selectedComponent) return null;
 

@@ -3,7 +3,11 @@ import { useDocuments, useSearch } from "../../api/hooks";
 import { COLLECTION_COLORS, formatDocId, formatTitle, titleCase } from "../../lib/documents";
 
 export default function DocumentTable() {
-  const { searchQuery, filters, page, selectedDocumentId, setSelectedDocumentId } = useStore();
+  const searchQuery = useStore((s) => s.searchQuery);
+  const filters = useStore((s) => s.filters);
+  const page = useStore((s) => s.page);
+  const selectedDocumentId = useStore((s) => s.selectedDocumentId);
+  const setSelectedDocumentId = useStore((s) => s.setSelectedDocumentId);
 
   const params = { ...filters, page, limit: 25 };
   const { data: docs, isLoading } = searchQuery

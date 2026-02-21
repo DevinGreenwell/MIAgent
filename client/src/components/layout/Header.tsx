@@ -8,7 +8,8 @@ const NAV_ITEMS = [
 ];
 
 export default function Header() {
-  const { activeView, setActiveView } = useStore();
+  const activeView = useStore((s) => s.activeView);
+  const setActiveView = useStore((s) => s.setActiveView);
 
   return (
     <header className="bg-sidebar px-3 md:px-4 py-2 flex flex-col gap-2 sm:flex-row sm:items-center border-b border-border shrink-0">
