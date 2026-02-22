@@ -838,6 +838,272 @@ app.get("/study/slideshow/:sessionId", (c) => {
   });
 });
 
+// ── Smart template layout helpers for PPTX export ───────────────────────────
+
+type SlideLayout = "NUMBERED_CARDS" | "TWO_COLUMN" | "STANDARD_PLUS";
+
+function selectSlideLayout(bullets: string[]): SlideLayout {
+  const avgLen =
+    bullets.reduce((sum, b) => sum + b.length, 0) / (bullets.length || 1);
+  if (bullets.length <= 4) return "NUMBERED_CARDS";
+  if (bullets.length >= 5 && avgLen > 80) return "TWO_COLUMN";
+  return "STANDARD_PLUS";
+}
+
+/** Subtle card shadow matching professional PPTX standards */
+const CARD_SHADOW = {
+  type: "outer" as const,
+  blur: 4,
+  offset: 2,
+  angle: 225,
+  color: "000000",
+  opacity: 0.1,
+};
+
+/** Navy title + gold accent bar on white header — shared across all content layouts */
+function renderSlideTitle(slide: any, pres: any, title: string) {
+  // Gold accent bar to left of title
+  slide.addShape(pres.ShapeType.rect, {
+    x: 0.25, y: 0.18, w: 0.07, h: 0.72,
+    fill: { color: "d4a04a" }, line: { width: 0 },
+  });
+  slide.addText(title, {
+    x: 0.5, y: 0.12, w: 11.5, h: 0.88,
+    fontSize: 24, bold: true, color: "003087", fontFace: "Arial",
+  });
+}
+
+/** Citations footer — muted gray */
+function renderCitations(slide: any, citations: string[]) {
+  if (citations.length > 0) {
+    slide.addText(citations.join("  |  "), {
+      x: 0.5, y: 6.45, w: 11, h: 0.35,
+      fontSize: 9, color: "6B7280", fontFace: "Arial",
+    });
+  }
+}
+
+/**
+ * Layout A: NUMBERED_CARDS — ≤4 bullets as a horizontal white card grid.
+ * White cards with shadows, gold top accent bars, and centered gold
+ * numbered circles on a light background.
+ */
+function renderNumberedCards(
+  slide: any, pres: any, title: string,
+  bullets: string[], citations: string[], notes: string | null,
+) {
+  renderSlideTitle(slide, pres, title);
+
+  const margin = 0.5;
+  const totalW = 12.33;
+  const gap = 0.3;
+  const startY = 1.35;
+  const cardH = 4.85;
+  const cols = bullets.length;
+  const cardW = cols === 1
+    ? Math.min(totalW, 8)
+    : (totalW - gap * (cols - 1)) / cols;
+  const startX = cols === 1
+    ? margin + (totalW - cardW) / 2
+    : margin;
+  const circleD = 0.55;
+  const accentH = 0.06;
+
+  for (let idx = 0; idx < bullets.length; idx++) {
+    const x = startX + idx * (cardW + gap);
+    const y = startY;
+
+    // White card with shadow
+    slide.addShape(pres.ShapeType.roundRect, {
+      x, y, w: cardW, h: cardH,
+      fill: { color: "FFFFFF" }, line: { width: 0 },
+      rectRadius: 0.06, shadow: CARD_SHADOW,
+    });
+
+    // Gold top accent bar
+    slide.addShape(pres.ShapeType.rect, {
+      x: x + 0.03, y, w: cardW - 0.06, h: accentH,
+      fill: { color: "d4a04a" }, line: { width: 0 },
+    });
+
+    // Gold numbered circle centered near top of card
+    const circleX = x + (cardW - circleD) / 2;
+    const circleY = y + accentH + 0.3;
+    slide.addShape(pres.ShapeType.ellipse, {
+      x: circleX, y: circleY, w: circleD, h: circleD,
+      fill: { color: "d4a04a" }, line: { width: 0 },
+    });
+    slide.addText(`${idx + 1}`, {
+      x: circleX, y: circleY, w: circleD, h: circleD,
+      fontSize: 20, bold: true, color: "0f2137",
+      fontFace: "Arial", align: "center", valign: "middle",
+    });
+
+    // Bullet text centered below circle
+    const textY = circleY + circleD + 0.3;
+    const textH = cardH - (textY - y) - 0.3;
+    slide.addText(bullets[idx], {
+      x: x + 0.35, y: textY, w: cardW - 0.7, h: textH,
+      fontSize: cols <= 2 ? 15 : 13,
+      color: "374151", fontFace: "Arial",
+      align: "center", valign: "top", lineSpacingMultiple: 1.4,
+    });
+  }
+
+  renderCitations(slide, citations);
+  if (notes) slide.addNotes(notes);
+}
+
+/**
+ * Layout B: TWO_COLUMN — 5+ long-text bullets split into two white panels.
+ * White panels with shadows, gold left accent bars, and gold numbered circles.
+ */
+function renderTwoColumn(
+  slide: any, pres: any, title: string,
+  bullets: string[], citations: string[], notes: string | null,
+) {
+  renderSlideTitle(slide, pres, title);
+
+  const startY = 1.35;
+  const panelH = 4.85;
+  const gap = 0.3;
+  const panelW = (12.33 - gap) / 2;
+  const leftX = 0.5;
+  const rightX = leftX + panelW + gap;
+  const circleD = 0.38;
+  const accentW = 0.06;
+  const leftCount = Math.ceil(bullets.length / 2);
+
+  // Draw both column panels with shadows + gold left accent bars
+  for (const px of [leftX, rightX]) {
+    slide.addShape(pres.ShapeType.roundRect, {
+      x: px, y: startY, w: panelW, h: panelH,
+      fill: { color: "FFFFFF" },
+      line: { width: 0 }, rectRadius: 0.06,
+      shadow: CARD_SHADOW,
+    });
+    // Gold left accent bar
+    slide.addShape(pres.ShapeType.rect, {
+      x: px, y: startY + 0.06, w: accentW, h: panelH - 0.12,
+      fill: { color: "d4a04a" }, line: { width: 0 },
+    });
+  }
+
+  const renderColumnBullets = (
+    colBullets: string[], baseX: number, startIndex: number,
+  ) => {
+    const padY = 0.25;
+    const padX = accentW + 0.2;
+    const itemH = Math.min((panelH - 2 * padY) / colBullets.length, 0.95);
+
+    for (let j = 0; j < colBullets.length; j++) {
+      const y = startY + padY + j * itemH;
+      const circleX = baseX + padX;
+      const circleY = y + (itemH - circleD) / 2;
+
+      slide.addShape(pres.ShapeType.ellipse, {
+        x: circleX, y: circleY, w: circleD, h: circleD,
+        fill: { color: "d4a04a" }, line: { width: 0 },
+      });
+      slide.addText(`${startIndex + j + 1}`, {
+        x: circleX, y: circleY, w: circleD, h: circleD,
+        fontSize: 12, bold: true, color: "0f2137",
+        fontFace: "Arial", align: "center", valign: "middle",
+      });
+
+      const textX = circleX + circleD + 0.15;
+      slide.addText(colBullets[j], {
+        x: textX, y,
+        w: panelW - (textX - baseX) - 0.25, h: itemH,
+        fontSize: 13, color: "374151", fontFace: "Arial",
+        valign: "middle", lineSpacingMultiple: 1.25,
+      });
+    }
+  };
+
+  renderColumnBullets(bullets.slice(0, leftCount), leftX, 0);
+  renderColumnBullets(bullets.slice(leftCount), rightX, leftCount);
+
+  renderCitations(slide, citations);
+  if (notes) slide.addNotes(notes);
+}
+
+/**
+ * Layout C: STANDARD_PLUS — 5+ short bullets in a single-column panel.
+ * White panel with shadow and gold left accent bar. Each bullet in a
+ * light gray container row with a gold numbered circle (step-row pattern).
+ */
+function renderStandardPlus(
+  slide: any, pres: any, title: string,
+  bullets: string[], citations: string[], notes: string | null,
+) {
+  renderSlideTitle(slide, pres, title);
+
+  const startY = 1.35;
+  const panelH = 4.85;
+  const panelX = 0.5;
+  const panelW = 12.33;
+  const accentW = 0.06;
+  const circleD = 0.38;
+
+  // White background panel with shadow + gold left accent
+  slide.addShape(pres.ShapeType.roundRect, {
+    x: panelX, y: startY, w: panelW, h: panelH,
+    fill: { color: "FFFFFF" },
+    line: { width: 0 }, rectRadius: 0.06,
+    shadow: CARD_SHADOW,
+  });
+  slide.addShape(pres.ShapeType.rect, {
+    x: panelX, y: startY + 0.06, w: accentW, h: panelH - 0.12,
+    fill: { color: "d4a04a" }, line: { width: 0 },
+  });
+
+  const padY = 0.2;
+  const padX = accentW + 0.25;
+  const rowGap = 0.1;
+  const rowH = Math.min(
+    (panelH - 2 * padY - rowGap * (bullets.length - 1)) / bullets.length, 0.7,
+  );
+
+  for (let idx = 0; idx < bullets.length; idx++) {
+    const y = startY + padY + idx * (rowH + rowGap);
+    const rowX = panelX + padX;
+    const rowW = panelW - padX - 0.25;
+
+    // Light gray row container
+    slide.addShape(pres.ShapeType.roundRect, {
+      x: rowX, y, w: rowW, h: rowH,
+      fill: { color: "F1F5F9" },
+      line: { width: 0 }, rectRadius: 0.04,
+    });
+
+    // Gold numbered circle
+    const circleX = rowX + 0.15;
+    const circleY = y + (rowH - circleD) / 2;
+    slide.addShape(pres.ShapeType.ellipse, {
+      x: circleX, y: circleY, w: circleD, h: circleD,
+      fill: { color: "d4a04a" }, line: { width: 0 },
+    });
+    slide.addText(`${idx + 1}`, {
+      x: circleX, y: circleY, w: circleD, h: circleD,
+      fontSize: 13, bold: true, color: "0f2137",
+      fontFace: "Arial", align: "center", valign: "middle",
+    });
+
+    // Bullet text
+    const textX = circleX + circleD + 0.2;
+    slide.addText(bullets[idx], {
+      x: textX, y,
+      w: rowW - (textX - rowX) - 0.15, h: rowH,
+      fontSize: 14, color: "374151", fontFace: "Arial",
+      valign: "middle", lineSpacingMultiple: 1.2,
+    });
+  }
+
+  renderCitations(slide, citations);
+  if (notes) slide.addNotes(notes);
+}
+
 // ── GET /study/slideshow/:sessionId/export — Export as PPTX or PDF ──────────
 
 app.get("/study/slideshow/:sessionId/export", async (c) => {
@@ -898,80 +1164,64 @@ app.get("/study/slideshow/:sessionId/export", async (c) => {
     pres.author = "MIAgent";
     pres.title = deckTitle;
 
-    // Define dark theme colors
-    const BG_COLOR = "1a1a2e";
-    const TEXT_COLOR = "e0e0e0";
-    const ACCENT_COLOR = "4fc3f7";
-    const MUTED_COLOR = "888888";
+    // ── Slide Masters — light professional theme ──────────────────
+    pres.defineSlideMaster({
+      title: "TITLE_SLIDE",
+      background: { color: "F0F4F8" },
+      objects: [
+        // White content area
+        { rect: { x: 0, y: 0, w: 13.33, h: 7.5, fill: { color: "FFFFFF" } } },
+        // Gold accent line
+        { rect: { x: 0.5, y: 2.65, w: 4, h: 0.04, fill: { color: "d4a04a" } } },
+        // Footer
+        { text: { text: "MIAgent — Study Slideshow", options: { x: 0.5, y: 6.9, w: 5, h: 0.3, fontSize: 9, color: "9CA3AF", fontFace: "Arial" } } },
+      ],
+    });
 
-    for (const s of slides) {
-      const slide = pres.addSlide();
+    pres.defineSlideMaster({
+      title: "CONTENT_SLIDE",
+      background: { color: "F0F4F8" },
+      objects: [
+        // White header area
+        { rect: { x: 0, y: 0, w: 13.33, h: 1.15, fill: { color: "FFFFFF" } } },
+        // Navy accent bar below header
+        { rect: { x: 0, y: 1.12, w: 13.33, h: 0.04, fill: { color: "003087" } } },
+        // Footer
+        { text: { text: "MIAgent — Study Slideshow", options: { x: 0.5, y: 6.9, w: 5, h: 0.3, fontSize: 9, color: "9CA3AF", fontFace: "Arial" } } },
+      ],
+    });
+
+    // ── Render slides with editable native text ────────────────
+    for (const [i, s] of slides.entries()) {
+      const slide = pres.addSlide({ masterName: i === 0 ? "TITLE_SLIDE" : "CONTENT_SLIDE" });
       const bullets = JSON.parse(s.bullets) as string[];
-      const hasImage = imageBuffers.has(s.slide_index);
 
-      if (hasImage) {
-        // Full-page slide image (text is baked into the image)
-        const imgBuf = imageBuffers.get(s.slide_index)!;
-        const mime = imgBuf[0] === 0xFF ? "image/jpeg" : "image/png";
-        slide.addImage({
-          data: `${mime};base64,${imgBuf.toString("base64")}`,
-          x: 0,
-          y: 0,
-          w: "100%",
-          h: "100%",
+      if (i === 0) {
+        // Title slide — large navy title + gray subtitle on white
+        slide.addText(s.title, {
+          x: 0.5, y: 2.8, w: 12, h: 1.2,
+          fontSize: 32, bold: true, color: "003087",
+          fontFace: "Arial", align: "left",
+        });
+        slide.addText(deckTitle, {
+          x: 0.5, y: 4.1, w: 12, h: 0.6,
+          fontSize: 16, color: "6B7280", fontFace: "Arial",
         });
       } else {
-        // Text-only fallback
-        slide.background = { color: BG_COLOR };
-
-        slide.addText(s.title, {
-          x: 0.5,
-          y: 0.3,
-          w: 12,
-          h: 0.7,
-          fontSize: 24,
-          bold: true,
-          color: TEXT_COLOR,
-          fontFace: "Arial",
-        });
-
-        slide.addText(
-          bullets.map((b) => ({
-            text: b,
-            options: {
-              bullet: { code: "2022" },
-              fontSize: 14,
-              color: TEXT_COLOR,
-              fontFace: "Arial",
-              lineSpacingMultiple: 1.5,
-            },
-          })),
-          {
-            x: 0.5,
-            y: 1.2,
-            w: 12,
-            h: 4.5,
-            valign: "top",
-          },
-        );
-
+        // Content slide — smart layout based on bullet count/length
         const citations = s.citations ? JSON.parse(s.citations) as string[] : [];
-        if (citations.length > 0) {
-          slide.addText(citations.join(" | "), {
-            x: 0.5,
-            y: 6.8,
-            w: 12,
-            h: 0.4,
-            fontSize: 9,
-            color: ACCENT_COLOR,
-            fontFace: "Arial",
-          });
+        const layout = selectSlideLayout(bullets);
+        switch (layout) {
+          case "NUMBERED_CARDS":
+            renderNumberedCards(slide, pres, s.title, bullets, citations, s.speaker_notes);
+            break;
+          case "TWO_COLUMN":
+            renderTwoColumn(slide, pres, s.title, bullets, citations, s.speaker_notes);
+            break;
+          case "STANDARD_PLUS":
+            renderStandardPlus(slide, pres, s.title, bullets, citations, s.speaker_notes);
+            break;
         }
-      }
-
-      // Speaker notes always added
-      if (s.speaker_notes) {
-        slide.addNotes(s.speaker_notes);
       }
     }
 
